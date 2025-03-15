@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/grid-calculator/static/css/main.e6c13ad2.css",
+    "main.js": "/grid-calculator/static/js/main.429c2522.js",
+    "static/js/453.a34ffbcc.chunk.js": "/grid-calculator/static/js/453.a34ffbcc.chunk.js",
+    "index.html": "/grid-calculator/index.html",
+    "main.e6c13ad2.css.map": "/grid-calculator/static/css/main.e6c13ad2.css.map",
+    "main.429c2522.js.map": "/grid-calculator/static/js/main.429c2522.js.map",
+    "453.a34ffbcc.chunk.js.map": "/grid-calculator/static/js/453.a34ffbcc.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e6c13ad2.css",
+    "static/js/main.429c2522.js"
+  ]
+}
