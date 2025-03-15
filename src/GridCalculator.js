@@ -42,11 +42,12 @@ const Card = styled.div`
   width: 100%;
   display: flex;
   flex-direction: column;
+  margin-top: 30px; /* ADJUST HERE: Controls how far the Card (white area) is pushed down from the top of AppContainer. Increase (e.g., 40px) or decrease (e.g., 20px) to adjust spacing above the Card. */
 `;
 
 const HeaderContainer = styled.div`
   display: flex;
-  justify-content: flex-end;  // Changed to flex-end to push content right
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 30px;
   position: relative;
@@ -60,6 +61,8 @@ const Title = styled.h1`
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  text-align: center; /* ADJUST HERE: Ensures stacked text is centered */
+  line-height: 1.2; /* ADJUST HERE: Controls spacing between "Labor Rate" and "Matrix". Increase (e.g., 1.5) for more space, decrease (e.g., 1) for less. */
 `;
 
 const InputsContainer = styled.div`
@@ -258,7 +261,9 @@ function GridCalculator() {
         </ThemeToggleButton>
         <Card>
           <HeaderContainer>
-            <Title>Labor Rate Matrix</Title>
+            <Title>
+              Labor Rate<br />Matrix {/* ADJUST HERE: The <br /> forces "Labor Rate" and "Matrix" to stack. Remove it to revert to a single line. */}
+            </Title>
             <InputsContainer>
               <InputGroup>
                 <InputWrapper style={{ gridColumn: '1', gridRow: '1' }}>
