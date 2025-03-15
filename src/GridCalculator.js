@@ -42,7 +42,7 @@ const Card = styled.div`
   width: 100%;
   display: flex;
   flex-direction: column;
-  margin-top: 30px; /* ADJUST HERE: Controls how far the Card (white area) is pushed down from the top of AppContainer. Increase (e.g., 40px) or decrease (e.g., 20px) to adjust spacing above the Card. */
+  margin-top: 30px;
 `;
 
 const HeaderContainer = styled.div`
@@ -61,8 +61,8 @@ const Title = styled.h1`
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  text-align: center; /* ADJUST HERE: Ensures stacked text is centered */
-  line-height: 1.2; /* ADJUST HERE: Controls spacing between "Labor Rate" and "Matrix". Increase (e.g., 1.5) for more space, decrease (e.g., 1) for less. */
+  text-align: center;
+  line-height: 1.2;
 `;
 
 const InputsContainer = styled.div`
@@ -217,12 +217,35 @@ const ThemeToggleButton = styled.button`
   }
 `;
 
+const Tooltip = styled.div`
+  position: absolute;
+  background-color: ${({ theme }) => theme.cardBg};
+  color: ${({ theme }) => theme.text};
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.border};
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translate(-50%, -100%);
+  top: ${({ y }) => y}px;
+  left: ${({ x }) => x}px;
+  visibility: ${({ show }) => (show ? 'visible' : 'hidden')};
+`;
+
 function GridCalculator() {
   const [baseRate, setBaseRate] = useState('100');
   const [multiplier, setMultiplier] = useState('10');
   const [capEnabled, setCapEnabled] = useState(false);
   const [capValue, setCapValue] = useState('');
   const [theme, setTheme] = useState('light');
+  const [tooltip, setTooltip] = useState({
+    show: false,
+    x: 0,
+    y: 0,
+    content: ''
+  });
 
   useEffect(() => {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -253,6 +276,24 @@ function GridCalculator() {
     return (hourRate + increment) * (numBaseRate + adjustment);
   };
 
+  const handleMouseEnter = (e, hourRate, increment) => {
+    const totalAmount = calculateValue(hourRate, increment);
+    const totalHours = hourRate + increment;
+    const elr = (totalAmount / totalHours).toFixed(2);
+    
+    const rect = e.target.getBoundingClientRect();
+    setTooltip({
+      show: true,
+      x: rect.left + rect.width / 2,
+      y: rect.top - 10,
+      content: `ELR: $${elr}/hr`
+    });
+  };
+
+  const handleMouseLeave = () => {
+    setTooltip({ ...tooltip, show: false });
+  };
+
   return (
     <ThemeProvider theme={theme === 'light' ? lightTheme : darkTheme}>
       <AppContainer>
@@ -262,7 +303,7 @@ function GridCalculator() {
         <Card>
           <HeaderContainer>
             <Title>
-              Labor Rate<br />Matrix {/* ADJUST HERE: The <br /> forces "Labor Rate" and "Matrix" to stack. Remove it to revert to a single line. */}
+              Labor Rate<br />Matrix
             </Title>
             <InputsContainer>
               <InputGroup>
@@ -327,7 +368,11 @@ function GridCalculator() {
                   <tr key={hourRate}>
                     <Td isFirstColumn>{hourRate.toFixed(1)}</Td>
                     {increments.map((inc) => (
-                      <Td key={inc}>
+                      <Td 
+                        key={inc}
+                        onMouseEnter={(e) => handleMouseEnter(e, hourRate, inc)}
+                        onMouseLeave={handleMouseLeave}
+                      >
                         {calculateValue(hourRate, inc).toFixed(2)}
                       </Td>
                     ))}
@@ -337,6 +382,13 @@ function GridCalculator() {
             </Table>
           </TableContainer>
         </Card>
+        <Tooltip 
+          show={tooltip.show}
+          x={tooltip.x}
+          y={tooltip.y}
+        >
+          {tooltip.content}
+        </Tooltip>
       </AppContainer>
     </ThemeProvider>
   );
