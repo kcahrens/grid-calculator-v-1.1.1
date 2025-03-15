@@ -262,18 +262,29 @@ function GridCalculator() {
   const calculateValue = (hourRate, increment) => {
     const numBaseRate = Number(baseRate) || 0;
     const numMultiplier = Number(multiplier) || 0;
-    let effectiveHourRate = hourRate;
-    if (capEnabled && capValue !== '') {
-      const cap = Math.floor(Number(capValue));
-      if (cap > 0) {
-        effectiveHourRate = Math.min(hourRate, cap);
-      }
+    const cap = capEnabled && capValue !== '' ? Math.floor(Number(capValue)) : 0;
+
+    const totalHours = hourRate + increment;
+
+    if (cap > 0 && hourRate > cap) {
+      // Compute adjustment and ELR at cap
+      const capAdjustment =
+        cap === 1 || numMultiplier === 0
+          ? 0
+          : (cap * (numMultiplier / 10)) + increment;
+      const capTotalAmount = (cap + increment) * (numBaseRate + capAdjustment);
+      const capTotalHours = cap + increment;
+      const elrAtCap = capTotalAmount / capTotalHours;
+      // Scale total amount to maintain ELR for hourRate > cap
+      return elrAtCap * totalHours;
+    } else {
+      // Normal calculation for hourRate <= cap or cap disabled
+      const adjustment =
+        hourRate === 1 || numMultiplier === 0
+          ? 0
+          : (hourRate * (numMultiplier / 10)) + increment;
+      return totalHours * (numBaseRate + adjustment);
     }
-    const adjustment =
-      hourRate === 1 || numMultiplier === 0
-        ? 0
-        : (effectiveHourRate * (numMultiplier / 10)) + increment;
-    return (hourRate + increment) * (numBaseRate + adjustment);
   };
 
   const handleMouseEnter = (e, hourRate, increment) => {
