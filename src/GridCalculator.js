@@ -1,129 +1,339 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import styled, { ThemeProvider } from 'styled-components';
+import { RiSunLine, RiMoonLine } from 'react-icons/ri';
+
+// Define themes
+const lightTheme = {
+  background: '#f5f7fa',
+  cardBg: '#ffffff',
+  text: '#1c2526',
+  border: '#d1d9e0',
+  accent: '#007aff',
+  headerBg: '#eef2f5',
+};
+
+const darkTheme = {
+  background: '#171a1c',
+  cardBg: '#25292b',
+  text: '#e6ecef',
+  border: '#3a4043',
+  accent: '#0a84ff',
+  headerBg: '#1f2224',
+};
+
+// Styled components
+const AppContainer = styled.div`
+  background-color: ${({ theme }) => theme.background};
+  color: ${({ theme }) => theme.text};
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  position: relative;
+`;
+
+const Card = styled.div`
+  background-color: ${({ theme }) => theme.cardBg};
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  padding: 30px;
+  max-width: 1200px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+`;
+
+const HeaderContainer = styled.div`
+  display: flex;
+  justify-content: flex-end;  // Changed to flex-end to push content right
+  align-items: center;
+  margin-bottom: 30px;
+  position: relative;
+`;
+
+const Title = styled.h1`
+  font-size: 36px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.text};
+  margin: 0;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+`;
+
+const InputsContainer = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 20px 20px;
+  align-items: start;
+`;
+
+const InputGroup = styled.div`
+  display: contents;
+`;
+
+const InputWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+`;
+
+const Label = styled.label`
+  font-size: 14px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.text};
+`;
+
+const Input = styled.input`
+  padding: 10px 14px;
+  background-color: ${({ theme }) => theme.cardBg};
+  color: ${({ theme }) => theme.text};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 10px;
+  width: 100px;
+  font-size: 16px;
+  transition: border-color 0.3s ease;
+
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.accent};
+  }
+`;
+
+const ToggleContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+`;
+
+const ToggleWrapper = styled.label`
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+`;
+
+const ToggleInput = styled.input`
+  opacity: 0;
+  width: 0;
+  height: 0;
+
+  &:checked + span {
+    background-color: ${({ theme }) => theme.accent};
+  }
+
+  &:checked + span:before {
+    transform: translateX(26px);
+  }
+`;
+
+const ToggleSlider = styled.span`
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: ${({ theme }) => theme.border};
+  border-radius: 24px;
+  transition: background-color 0.3s ease;
+
+  &:before {
+    position: absolute;
+    content: '';
+    height: 20px;
+    width: 20px;
+    left: 2px;
+    bottom: 2px;
+    background-color: ${({ theme }) => theme.text};
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+  }
+`;
+
+const TableContainer = styled.div`
+  overflow-x: auto;
+  margin-top: 20px;
+`;
+
+const Table = styled.table`
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 12px;
+  overflow: hidden;
+`;
+
+const Th = styled.th`
+  background-color: ${({ theme }) => theme.headerBg};
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+  padding: 14px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: ${({ isFirstRow }) => (isFirstRow ? '700' : '600')};
+  color: ${({ theme }) => theme.text};
+`;
+
+const Td = styled.td`
+  background-color: ${({ isFirstColumn, theme }) =>
+    isFirstColumn ? theme.headerBg : theme.cardBg};
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+  padding: 14px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: ${({ isFirstColumn }) => (isFirstColumn ? '700' : '400')};
+  color: ${({ theme }) => theme.text};
+
+  &:hover {
+    background-color: ${({ theme, isFirstColumn }) =>
+      isFirstColumn
+        ? theme.headerBg
+        : theme === lightTheme
+        ? '#f0f0f0'
+        : '#303436'};
+  }
+`;
+
+const ThemeToggleButton = styled.button`
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: ${({ theme }) => theme.text};
+  transition: transform 0.3s ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+`;
 
 function GridCalculator() {
-  // State for inputs
-  const [baseRate, setBaseRate] = useState('100'); // Base rate as string to allow empty input
-  const [multiplier, setMultiplier] = useState('10'); // Multiplier as string to allow empty input
-  const [capEnabled, setCapEnabled] = useState(false); // Cap switch, off by default
-  const [capValue, setCapValue] = useState(''); // Cap value as string to allow empty input
+  const [baseRate, setBaseRate] = useState('100');
+  const [multiplier, setMultiplier] = useState('10');
+  const [capEnabled, setCapEnabled] = useState(false);
+  const [capValue, setCapValue] = useState('');
+  const [theme, setTheme] = useState('light');
 
-  // Generate hour rates (1.0 to 20.0)
+  useEffect(() => {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setTheme(prefersDark ? 'dark' : 'light');
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light');
+  };
+
   const hourRates = Array.from({ length: 20 }, (_, i) => i + 1);
-
-  // Generate increments (0.0 to 0.9 in steps of 0.1)
   const increments = Array.from({ length: 10 }, (_, i) => i * 0.1);
 
-  // Function to calculate cell values with cap logic
   const calculateValue = (hourRate, increment) => {
-    const numBaseRate = Number(baseRate) || 0; // Convert to number, empty becomes 0
-    const numMultiplier = Number(multiplier) || 0; // Convert to number, empty becomes 0
-
-    // Determine the effective hour rate for the adjustment calculation
+    const numBaseRate = Number(baseRate) || 0;
+    const numMultiplier = Number(multiplier) || 0;
     let effectiveHourRate = hourRate;
     if (capEnabled && capValue !== '') {
-      const cap = Math.floor(Number(capValue)); // Ensure cap is a whole number
+      const cap = Math.floor(Number(capValue));
       if (cap > 0) {
-        effectiveHourRate = Math.min(hourRate, cap); // Cap the hour rate if exceeded
+        effectiveHourRate = Math.min(hourRate, cap);
       }
     }
-
-    // Calculate adjustment: 0 if hourRate is 1 or multiplier is 0, otherwise scale by effective hour rate
     const adjustment =
       hourRate === 1 || numMultiplier === 0
         ? 0
         : (effectiveHourRate * (numMultiplier / 10)) + increment;
-
-    // Final cell value
     return (hourRate + increment) * (numBaseRate + adjustment);
   };
 
   return (
-    <div>
-      {/* Base Rate Input */}
-      <div style={{ marginBottom: '10px' }}>
-        <label>Base Rate: </label>
-        <input
-          type="number"
-          value={baseRate}
-          onChange={(e) => setBaseRate(e.target.value)}
-          style={{ marginLeft: '5px' }}
-        />
-      </div>
-
-      {/* Multiplier Input */}
-      <div style={{ marginBottom: '10px' }}>
-        <label>Multiplier: </label>
-        <input
-          type="number"
-          value={multiplier}
-          onChange={(e) => setMultiplier(e.target.value)}
-          style={{ marginLeft: '5px' }}
-        />
-      </div>
-
-      {/* Cap Matrix Switch */}
-      <div style={{ marginBottom: '10px' }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={capEnabled}
-            onChange={(e) => setCapEnabled(e.target.checked)}
-          />
-          Cap matrix
-        </label>
-      </div>
-
-      {/* Cap Value Input (shown only when cap is enabled) */}
-      {capEnabled && (
-        <div style={{ marginBottom: '20px' }}>
-          <label>Cap value: </label>
-          <input
-            type="number"
-            value={capValue}
-            onChange={(e) => setCapValue(e.target.value)}
-            step="1" // Allows only whole numbers in UI
-            min="0" // Prevents negative numbers
-            style={{ marginLeft: '5px' }}
-          />
-        </div>
-      )}
-
-      {/* Grid Table */}
-      <table style={{ borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th style={{ border: '1px solid black', padding: '5px' }}>
-              Hour Rate
-            </th>
-            {increments.map((inc) => (
-              <th
-                key={inc}
-                style={{ border: '1px solid black', padding: '5px' }}
-              >
-                {inc.toFixed(1)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {hourRates.map((hourRate) => (
-            <tr key={hourRate}>
-              <td style={{ border: '1px solid black', padding: '5px' }}>
-                {hourRate.toFixed(1)}
-              </td>
-              {increments.map((inc) => (
-                <td
-                  key={inc}
-                  style={{ border: '1px solid black', padding: '5px' }}
-                >
-                  {calculateValue(hourRate, inc).toFixed(2)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ThemeProvider theme={theme === 'light' ? lightTheme : darkTheme}>
+      <AppContainer>
+        <ThemeToggleButton onClick={toggleTheme}>
+          {theme === 'light' ? <RiSunLine /> : <RiMoonLine />}
+        </ThemeToggleButton>
+        <Card>
+          <HeaderContainer>
+            <Title>Labor Rate Matrix</Title>
+            <InputsContainer>
+              <InputGroup>
+                <InputWrapper style={{ gridColumn: '1', gridRow: '1' }}>
+                  <Label>Base Rate</Label>
+                  <Input
+                    type="number"
+                    value={baseRate}
+                    onChange={(e) => setBaseRate(e.target.value)}
+                  />
+                </InputWrapper>
+                <InputWrapper style={{ gridColumn: '2', gridRow: '1' }}>
+                  <Label>Multiplier</Label>
+                  <Input
+                    type="number"
+                    value={multiplier}
+                    onChange={(e) => setMultiplier(e.target.value)}
+                  />
+                </InputWrapper>
+                <ToggleContainer style={{ gridColumn: '1', gridRow: '2' }}>
+                  <Label>Cap Matrix</Label>
+                  <ToggleWrapper>
+                    <ToggleInput
+                      type="checkbox"
+                      checked={capEnabled}
+                      onChange={(e) => setCapEnabled(e.target.checked)}
+                    />
+                    <ToggleSlider />
+                  </ToggleWrapper>
+                </ToggleContainer>
+                <InputWrapper style={{ 
+                  gridColumn: '2', 
+                  gridRow: '2',
+                  visibility: capEnabled ? 'visible' : 'hidden' 
+                }}>
+                  <Label>Cap Hour</Label>
+                  <Input
+                    type="number"
+                    value={capValue}
+                    onChange={(e) => setCapValue(e.target.value)}
+                    step="1"
+                    min="0"
+                  />
+                </InputWrapper>
+              </InputGroup>
+            </InputsContainer>
+          </HeaderContainer>
+          <TableContainer>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Labor Time</Th>
+                  {increments.map((inc) => (
+                    <Th key={inc} isFirstRow>
+                      {inc.toFixed(1)}
+                    </Th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {hourRates.map((hourRate) => (
+                  <tr key={hourRate}>
+                    <Td isFirstColumn>{hourRate.toFixed(1)}</Td>
+                    {increments.map((inc) => (
+                      <Td key={inc}>
+                        {calculateValue(hourRate, inc).toFixed(2)}
+                      </Td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </TableContainer>
+        </Card>
+      </AppContainer>
+    </ThemeProvider>
   );
 }
 
