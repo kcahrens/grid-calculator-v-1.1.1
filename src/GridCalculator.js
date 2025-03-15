@@ -282,10 +282,13 @@ function GridCalculator() {
     const elr = (totalAmount / totalHours).toFixed(2);
     
     const rect = e.target.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    
     setTooltip({
       show: true,
-      x: rect.left + rect.width / 2,
-      y: rect.top - 10,
+      x: rect.left + rect.width / 2 + scrollLeft,
+      y: rect.top - 10 + scrollTop,
       content: `ELR: $${elr}/hr`
     });
   };
