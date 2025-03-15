@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 
 function GridCalculator() {
-  // State for base rate and multiplier as strings
-  const [baseRate, setBaseRate] = useState('100');
-  const [multiplier, setMultiplier] = useState('10');
+  // State for inputs
+  const [baseRate, setBaseRate] = useState('100'); // Base rate as string to allow empty input
+  const [multiplier, setMultiplier] = useState('10'); // Multiplier as string to allow empty input
+  const [capEnabled, setCapEnabled] = useState(false); // Cap switch, off by default
+  const [capValue, setCapValue] = useState(''); // Cap value as string to allow empty input
 
   // Generate hour rates (1.0 to 20.0)
   const hourRates = Array.from({ length: 20 }, (_, i) => i + 1);
@@ -11,14 +13,27 @@ function GridCalculator() {
   // Generate increments (0.0 to 0.9 in steps of 0.1)
   const increments = Array.from({ length: 10 }, (_, i) => i * 0.1);
 
-  // Function to calculate cell values based on the formula
+  // Function to calculate cell values with cap logic
   const calculateValue = (hourRate, increment) => {
-    const numBaseRate = Number(baseRate); // Convert string to number, '' becomes 0
-    const numMultiplier = Number(multiplier); // Convert string to number, '' becomes 0
+    const numBaseRate = Number(baseRate) || 0; // Convert to number, empty becomes 0
+    const numMultiplier = Number(multiplier) || 0; // Convert to number, empty becomes 0
+
+    // Determine the effective hour rate for the adjustment calculation
+    let effectiveHourRate = hourRate;
+    if (capEnabled && capValue !== '') {
+      const cap = Math.floor(Number(capValue)); // Ensure cap is a whole number
+      if (cap > 0) {
+        effectiveHourRate = Math.min(hourRate, cap); // Cap the hour rate if exceeded
+      }
+    }
+
+    // Calculate adjustment: 0 if hourRate is 1 or multiplier is 0, otherwise scale by effective hour rate
     const adjustment =
       hourRate === 1 || numMultiplier === 0
         ? 0
-        : (hourRate * (numMultiplier / 10)) + increment;
+        : (effectiveHourRate * (numMultiplier / 10)) + increment;
+
+    // Final cell value
     return (hourRate + increment) * (numBaseRate + adjustment);
   };
 
@@ -30,21 +45,48 @@ function GridCalculator() {
         <input
           type="number"
           value={baseRate}
-          onChange={(e) => setBaseRate(e.target.value)} // Set state to string value
+          onChange={(e) => setBaseRate(e.target.value)}
           style={{ marginLeft: '5px' }}
         />
       </div>
 
       {/* Multiplier Input */}
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '10px' }}>
         <label>Multiplier: </label>
         <input
           type="number"
           value={multiplier}
-          onChange={(e) => setMultiplier(e.target.value)} // Set state to string value
+          onChange={(e) => setMultiplier(e.target.value)}
           style={{ marginLeft: '5px' }}
         />
       </div>
+
+      {/* Cap Matrix Switch */}
+      <div style={{ marginBottom: '10px' }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={capEnabled}
+            onChange={(e) => setCapEnabled(e.target.checked)}
+          />
+          Cap matrix
+        </label>
+      </div>
+
+      {/* Cap Value Input (shown only when cap is enabled) */}
+      {capEnabled && (
+        <div style={{ marginBottom: '20px' }}>
+          <label>Cap value: </label>
+          <input
+            type="number"
+            value={capValue}
+            onChange={(e) => setCapValue(e.target.value)}
+            step="1" // Allows only whole numbers in UI
+            min="0" // Prevents negative numbers
+            style={{ marginLeft: '5px' }}
+          />
+        </div>
+      )}
 
       {/* Grid Table */}
       <table style={{ borderCollapse: 'collapse' }}>
