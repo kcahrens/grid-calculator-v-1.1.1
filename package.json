@@ -2,7 +2,7 @@
   "name": "grid-calculator",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://kcahrens.github.io/grid-calculator",
+  "homepage": "https://kcahrens.github.io/grid-calculator-v-1.1.1/",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
