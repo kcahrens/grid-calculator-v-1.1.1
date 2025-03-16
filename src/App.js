@@ -1,9 +1,9 @@
 // src/App.js
 import React from 'react';
-import GridCalculator from './components/GridCalculator'; // Updated path
+import GridCalculator from './components/GridCalculator';
 
 function App() {
-  return ( 
+  return (
     <div>
       <GridCalculator />
     </div>

@@ -1,7 +1,7 @@
 // src/components/GridCalculator.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import styled, { ThemeProvider } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine } from 'react-icons/ri';
 import Graph from './Graph';
 
 // Define themes
@@ -49,10 +49,12 @@ const Header = styled.header`
 `;
 
 const Title = styled.h1`
+  font-family: 'Red Hat Text', sans-serif !important;
   font-size: 36px;
   font-weight: 700;
   color: ${({ theme }) => theme.text};
   text-align: center;
+  letter-spacing: -0.5px;
   @media (max-width: 600px) {
     font-size: 28px;
   }
@@ -61,16 +63,19 @@ const Title = styled.h1`
 const ButtonGroup = styled.div`
   display: flex;
   gap: 10px;
+  align-items: center;
 `;
 
 const IconButton = styled.button`
-  background: none;
+  background: ${({ active, theme }) => (active ? theme.accent : 'none')};
   border: none;
   cursor: pointer;
   padding: 8px;
-  color: ${({ theme }) => theme.text};
+  color: ${({ active, theme }) => (active ? '#fff' : theme.text)};
+  border-radius: 8px;
   &:hover {
-    color: ${({ theme }) => theme.accent};
+    background: ${({ theme }) => theme.accent};
+    color: #fff;
   }
 `;
 
@@ -247,14 +252,28 @@ const Tooltip = styled.div`
   visibility: ${({ show }) => (show ? 'visible' : 'hidden')};
 `;
 
+const CalculatorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+`;
+
+const ResultText = styled.p`
+  font-size: 18px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.text};
+`;
+
 function GridCalculator() {
   const [baseRate, setBaseRate] = useState('100');
   const [multiplier, setMultiplier] = useState('10');
   const [capEnabled, setCapEnabled] = useState(false);
   const [capValue, setCapValue] = useState('');
   const [theme, setTheme] = useState('light');
-  const [showGraph, setShowGraph] = useState(false);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid', 'graph', or 'calculator'
   const [showDollarAmount, setShowDollarAmount] = useState(false);
+  const [inputHours, setInputHours] = useState('');
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: '' });
 
   useEffect(() => {
@@ -286,9 +305,11 @@ function GridCalculator() {
     let value = totalHours * (numBaseRate + adjustment);
 
     if (!isCapCalculation && capEnabled && capValue !== '') {
-      const cap = Math.floor(Number(capValue));
+      const cap = Number(capValue);
       if (cap > 0 && totalHours >= cap) {
-        const capValueAtLimit = calculateValue(cap, 0, true);
+        const capHourRate = Math.floor(cap);
+        const capIncrement = cap - capHourRate;
+        const capValueAtLimit = calculateValue(capHourRate, capIncrement, true);
         const cappedELR = capValueAtLimit / cap;
         value = totalHours * cappedELR;
       }
@@ -338,19 +359,33 @@ function GridCalculator() {
     setTooltip({ show: false, x: 0, y: 0, content: '' });
   };
 
+  const numInputHours = Number(inputHours);
+  let totalAmount = 0;
+  if (!isNaN(numInputHours) && numInputHours >= 0) {
+    const hourRate = Math.floor(numInputHours);
+    const increment = numInputHours - hourRate;
+    totalAmount = calculateValue(hourRate, increment);
+  }
+
   return (
     <ThemeProvider theme={theme === 'light' ? lightTheme : darkTheme}>
       <AppContainer>
         <Header>
           <Title>Labor Rate Matrix</Title>
           <ButtonGroup>
-            {showGraph && (
+            {viewMode === 'graph' && (
               <IconButton onClick={() => setShowDollarAmount(!showDollarAmount)}>
                 <RiExchangeDollarLine size={24} />
               </IconButton>
             )}
-            <IconButton onClick={() => setShowGraph(!showGraph)}>
+            <IconButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
+              <RiTableLine size={24} />
+            </IconButton>
+            <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
               <RiLineChartLine size={24} />
+            </IconButton>
+            <IconButton onClick={() => setViewMode('calculator')} active={viewMode === 'calculator'}>
+              <RiFlashlightLine size={24} />
             </IconButton>
             <IconButton onClick={toggleTheme}>
               {theme === 'light' ? <RiSunLine size={24} /> : <RiMoonLine size={24} />}
@@ -385,7 +420,7 @@ function GridCalculator() {
                     type="number"
                     value={capValue}
                     onChange={(e) => setCapValue(e.target.value)}
-                    step="1"
+                    step="0.1"
                     min="0"
                   />
                 </InputWrapper>
@@ -403,8 +438,30 @@ function GridCalculator() {
               </ToggleContainer>
             </RightInputs>
           </InputsContainer>
-          {showGraph ? (
+          {viewMode === 'graph' ? (
             <Graph data={graphData} baseRate={baseRate} showDollarAmount={showDollarAmount} theme={theme} />
+          ) : viewMode === 'calculator' ? (
+            <CalculatorContainer>
+              <InputWrapper>
+                <Label>Enter Hours</Label>
+                <Input
+                  type="number"
+                  value={inputHours}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || (Number(value) >= 0)) {
+                      setInputHours(value);
+                    }
+                  }}
+                  step="0.1"
+                  min="0"
+                  placeholder="e.g., 5.5"
+                />
+              </InputWrapper>
+              {inputHours && !isNaN(numInputHours) && numInputHours >= 0 && (
+                <ResultText>Total Amount: ${totalAmount.toFixed(2)}</ResultText>
+              )}
+            </CalculatorContainer>
           ) : (
             <Table>
               <thead>
@@ -434,7 +491,7 @@ function GridCalculator() {
             </Table>
           )}
         </Card>
-        {!showGraph && (
+        {viewMode === 'grid' && (
           <Tooltip show={tooltip.show} x={tooltip.x} y={tooltip.y}>
             {tooltip.content}
           </Tooltip>

@@ -3,12 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title></title>
+    <title>Grid Calculator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Text:wght@700&display=swap" rel="stylesheet">
+    <!-- Inline CSS for the version number styling -->
+    <style>
+      .version-text {
+        position: fixed; /* Changed to fixed to stay in viewport across all screens */
+        bottom: 20px;
+        left: 20px;
+        font-size: 14px;
+        color: #666; /* Neutral gray that works with light/dark backgrounds */
+        opacity: 0.7;
+        font-family: 'Red Hat Text', sans-serif; /* Matches your app's font */
+        z-index: 1000; /* Ensures it stays above other content */
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
-    <footer>
-      <p>Version 1.2.0</p>
-    </footer>
+    <div class="version-text">v1.5.0</div> <!-- Version number added here, below the root div, to appear in the lower left -->
   </body>
 </html>
