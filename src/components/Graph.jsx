@@ -6,18 +6,16 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 const CustomTooltip = ({ active, payload, label, showDollarAmount, baseRate, theme }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload; // Get the data point
-    const firstLineValue = showDollarAmount ? data.totalAmount : data.elr;
-    const secondLineValue = showDollarAmount ? (data.hours * baseRate) : baseRate;
-    const difference = firstLineValue - secondLineValue;
+    const matrixLabor = data.totalAmount; // Matrix total amount
+    const baseRateLabor = data.hours * baseRate; // Base total amount
+    const laborDifference = matrixLabor - baseRateLabor;
+    const matrixELR = showDollarAmount ? data.totalAmount / data.hours : data.elr; // Matrix ELR
+    const baseELR = baseRate; // Base ELR
+    const elrDifference = matrixELR - baseELR;
 
-    // Format values based on the view
-    const formatValue = (value) => {
-      return showDollarAmount ? `$${Math.round(value)}` : `$${Math.round(value)}/hr`;
-    };
-
-    const formatDifference = (diff) => {
-      return showDollarAmount ? `$${Math.round(diff)}` : `$${Math.round(diff)}/hr`;
-    };
+    // Format values
+    const formatDollar = (value) => `$${Math.round(value)}`;
+    const formatELR = (value) => `$${Math.round(value)}/hr`;
 
     return (
       <div style={{
@@ -29,9 +27,22 @@ const CustomTooltip = ({ active, payload, label, showDollarAmount, baseRate, the
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
       }}>
         <p>{`Hours: ${label.toFixed(1)}`}</p>
-        <p>{`${showDollarAmount ? 'Matrix Amount' : 'Calculated ELR'}: ${formatValue(firstLineValue)}`}</p>
-        <p>{`${showDollarAmount ? 'Standard Amount' : 'Base Rate'}: ${formatValue(secondLineValue)}`}</p>
-        <p>{`Difference: ${formatDifference(difference)}`}</p>
+        {showDollarAmount ? (
+          <>
+            <p>{`Matrix Labor: ${formatDollar(matrixLabor)}`}</p>
+            <p>{`Base Rate Labor: ${formatDollar(baseRateLabor)}`}</p>
+            <p>{`Difference: ${formatDollar(laborDifference)}`}</p>
+            <p>{`Matrix ELR: ${formatELR(matrixELR)}`}</p>
+            <p>{`Base ELR: ${formatELR(baseELR)}`}</p>
+            <p>{`Difference: ${formatELR(elrDifference)}`}</p>
+          </>
+        ) : (
+          <>
+            <p>{`Matrix ELR: ${formatELR(matrixELR)}`}</p>
+            <p>{`Base ELR: ${formatELR(baseELR)}`}</p>
+            <p>{`Difference: ${formatELR(elrDifference)}`}</p>
+          </>
+        )}
       </div>
     );
   }
