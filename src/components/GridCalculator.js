@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+// src/components/GridCalculator.jsx
+import React, { useState, useEffect, useMemo } from 'react';
 import styled, { ThemeProvider } from 'styled-components';
-import { RiSunLine, RiMoonLine } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine } from 'react-icons/ri';
+import Graph from './Graph';
 
 // Define themes
 const lightTheme = {
@@ -10,6 +12,8 @@ const lightTheme = {
   border: '#d1d9e0',
   accent: '#007aff',
   headerBg: '#eef2f5',
+  tooltipBg: '#ffffff',
+  tooltipText: '#1c2526',
 };
 
 const darkTheme = {
@@ -19,6 +23,8 @@ const darkTheme = {
   border: '#3a4043',
   accent: '#0a84ff',
   headerBg: '#1f2224',
+  tooltipBg: '#25292b',
+  tooltipText: '#e6ecef',
 };
 
 // Styled components
@@ -33,6 +39,41 @@ const AppContainer = styled.div`
   position: relative;
 `;
 
+const Header = styled.header`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: 1200px;
+  margin-bottom: 20px;
+`;
+
+const Title = styled.h1`
+  font-size: 36px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.text};
+  text-align: center;
+  @media (max-width: 600px) {
+    font-size: 28px;
+  }
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const IconButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  color: ${({ theme }) => theme.text};
+  &:hover {
+    color: ${({ theme }) => theme.accent};
+  }
+`;
+
 const Card = styled.div`
   background-color: ${({ theme }) => theme.cardBg};
   border-radius: 20px;
@@ -40,41 +81,43 @@ const Card = styled.div`
   padding: 30px;
   max-width: 1200px;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  margin-top: 30px;
-`;
-
-const HeaderContainer = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  margin-bottom: 30px;
-  position: relative;
-`;
-
-const Title = styled.h1`
-  font-size: 36px;
-  font-weight: 700;
-  color: ${({ theme }) => theme.text};
-  margin: 0;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-  line-height: 1.2;
 `;
 
 const InputsContainer = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
-  gap: 20px 20px;
-  align-items: start;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 30px;
+  align-items: flex-start;
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+  }
 `;
 
-const InputGroup = styled.div`
-  display: contents;
+const LeftInputs = styled.div`
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+  }
+`;
+
+const RightInputs = styled.div`
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  align-items: flex-start;
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+  }
 `;
 
 const InputWrapper = styled.div`
@@ -82,12 +125,22 @@ const InputWrapper = styled.div`
   flex-direction: column;
   align-items: center;
   gap: 5px;
+  min-width: 120px;
+`;
+
+const ToggleContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 120px;
 `;
 
 const Label = styled.label`
   font-size: 14px;
   font-weight: 600;
   color: ${({ theme }) => theme.text};
+  text-align: center;
 `;
 
 const Input = styled.input`
@@ -98,19 +151,13 @@ const Input = styled.input`
   border-radius: 10px;
   width: 100px;
   font-size: 16px;
-  transition: border-color 0.3s ease;
-
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.accent};
   }
-`;
-
-const ToggleContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
+  @media (max-width: 600px) {
+    width: 150px;
+  }
 `;
 
 const ToggleWrapper = styled.label`
@@ -124,11 +171,9 @@ const ToggleInput = styled.input`
   opacity: 0;
   width: 0;
   height: 0;
-
   &:checked + span {
     background-color: ${({ theme }) => theme.accent};
   }
-
   &:checked + span:before {
     transform: translateX(26px);
   }
@@ -143,8 +188,6 @@ const ToggleSlider = styled.span`
   bottom: 0;
   background-color: ${({ theme }) => theme.border};
   border-radius: 24px;
-  transition: background-color 0.3s ease;
-
   &:before {
     position: absolute;
     content: '';
@@ -156,11 +199,6 @@ const ToggleSlider = styled.span`
     border-radius: 50%;
     transition: transform 0.3s ease;
   }
-`;
-
-const TableContainer = styled.div`
-  overflow-x: auto;
-  margin-top: 20px;
 `;
 
 const Table = styled.table`
@@ -177,7 +215,7 @@ const Th = styled.th`
   padding: 14px;
   text-align: center;
   font-size: 14px;
-  font-weight: ${({ isFirstRow }) => (isFirstRow ? '700' : '600')};
+  font-weight: 700;
   color: ${({ theme }) => theme.text};
 `;
 
@@ -190,31 +228,6 @@ const Td = styled.td`
   font-size: 14px;
   font-weight: ${({ isFirstColumn }) => (isFirstColumn ? '700' : '400')};
   color: ${({ theme }) => theme.text};
-
-  &:hover {
-    background-color: ${({ theme, isFirstColumn }) =>
-      isFirstColumn
-        ? theme.headerBg
-        : theme === lightTheme
-        ? '#f0f0f0'
-        : '#303436'};
-  }
-`;
-
-const ThemeToggleButton = styled.button`
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: ${({ theme }) => theme.text};
-  transition: transform 0.3s ease;
-
-  &:hover {
-    transform: scale(1.1);
-  }
 `;
 
 const Tooltip = styled.div`
@@ -240,12 +253,9 @@ function GridCalculator() {
   const [capEnabled, setCapEnabled] = useState(false);
   const [capValue, setCapValue] = useState('');
   const [theme, setTheme] = useState('light');
-  const [tooltip, setTooltip] = useState({
-    show: false,
-    x: 0,
-    y: 0,
-    content: ''
-  });
+  const [showGraph, setShowGraph] = useState(false);
+  const [showDollarAmount, setShowDollarAmount] = useState(false);
+  const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: '' });
 
   useEffect(() => {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -256,103 +266,120 @@ function GridCalculator() {
     setTheme(theme === 'light' ? 'dark' : 'light');
   };
 
-  const hourRates = Array.from({ length: 20 }, (_, i) => i + 1);
+  const hourRates = Array.from({ length: 21 }, (_, i) => i);
   const increments = Array.from({ length: 10 }, (_, i) => i * 0.1);
 
-  const calculateValue = (hourRate, increment) => {
+  const calculateValue = (hourRate, increment, isCapCalculation = false) => {
     const numBaseRate = Number(baseRate) || 0;
     const numMultiplier = Number(multiplier) || 0;
-    const cap = capEnabled && capValue !== '' ? Math.floor(Number(capValue)) : 0;
-
     const totalHours = hourRate + increment;
 
-    if (cap > 0 && hourRate > cap) {
-      // Compute adjustment and ELR at cap
-      const capAdjustment =
-        cap === 1 || numMultiplier === 0
-          ? 0
-          : (cap * (numMultiplier / 10)) + increment;
-      const capTotalAmount = (cap + increment) * (numBaseRate + capAdjustment);
-      const capTotalHours = cap + increment;
-      const elrAtCap = capTotalAmount / capTotalHours;
-      // Scale total amount to maintain ELR for hourRate > cap
-      return elrAtCap * totalHours;
-    } else {
-      // Normal calculation for hourRate <= cap or cap disabled
-      const adjustment =
-        hourRate === 1 || numMultiplier === 0
-          ? 0
-          : (hourRate * (numMultiplier / 10)) + increment;
-      return totalHours * (numBaseRate + adjustment);
+    if (hourRate === 0) {
+      return totalHours * numBaseRate;
     }
+
+    let effectiveHourRate = hourRate;
+    let adjustment =
+      hourRate === 1 || numMultiplier === 0
+        ? 0
+        : (effectiveHourRate * (numMultiplier / 10)) + increment;
+    let value = totalHours * (numBaseRate + adjustment);
+
+    if (!isCapCalculation && capEnabled && capValue !== '') {
+      const cap = Math.floor(Number(capValue));
+      if (cap > 0 && totalHours >= cap) {
+        const capValueAtLimit = calculateValue(cap, 0, true);
+        const cappedELR = capValueAtLimit / cap;
+        value = totalHours * cappedELR;
+      }
+    }
+
+    return value;
   };
+
+  const generateGraphData = () => {
+    const data = [];
+    hourRates.forEach((hourRate) => {
+      increments.forEach((inc) => {
+        const totalHours = hourRate + inc;
+        if (totalHours >= 1.0) {
+          const totalAmount = calculateValue(hourRate, inc);
+          const elr = totalHours > 0 ? parseFloat((totalAmount / totalHours).toFixed(2)) : 0;
+          data.push({ hours: totalHours, elr, totalAmount });
+        }
+      });
+    });
+    return data.sort((a, b) => a.hours - b.hours);
+  };
+
+  const graphData = useMemo(() => generateGraphData(), [baseRate, multiplier, capEnabled, capValue]);
 
   const handleMouseEnter = (e, hourRate, increment) => {
     const totalAmount = calculateValue(hourRate, increment);
     const totalHours = hourRate + increment;
-    const elr = (totalAmount / totalHours).toFixed(2);
-    
+    let elr;
+    if (totalHours === 0) {
+      elr = 'N/A';
+    } else {
+      elr = (totalAmount / totalHours).toFixed(2);
+    }
     const rect = e.target.getBoundingClientRect();
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-    
     setTooltip({
       show: true,
       x: rect.left + rect.width / 2 + scrollLeft,
       y: rect.top - 10 + scrollTop,
-      content: `ELR: $${elr}/hr`
+      content: `ELR: $${elr}/hr`,
     });
   };
 
   const handleMouseLeave = () => {
-    setTooltip({ ...tooltip, show: false });
+    setTooltip({ show: false, x: 0, y: 0, content: '' });
   };
 
   return (
     <ThemeProvider theme={theme === 'light' ? lightTheme : darkTheme}>
       <AppContainer>
-        <ThemeToggleButton onClick={toggleTheme}>
-          {theme === 'light' ? <RiSunLine /> : <RiMoonLine />}
-        </ThemeToggleButton>
+        <Header>
+          <Title>Labor Rate Matrix</Title>
+          <ButtonGroup>
+            {showGraph && (
+              <IconButton onClick={() => setShowDollarAmount(!showDollarAmount)}>
+                <RiExchangeDollarLine size={24} />
+              </IconButton>
+            )}
+            <IconButton onClick={() => setShowGraph(!showGraph)}>
+              <RiLineChartLine size={24} />
+            </IconButton>
+            <IconButton onClick={toggleTheme}>
+              {theme === 'light' ? <RiSunLine size={24} /> : <RiMoonLine size={24} />}
+            </IconButton>
+          </ButtonGroup>
+        </Header>
         <Card>
-          <HeaderContainer>
-            <Title>
-              Labor Rate<br />Matrix
-            </Title>
-            <InputsContainer>
-              <InputGroup>
-                <InputWrapper style={{ gridColumn: '1', gridRow: '1' }}>
-                  <Label>Base Rate</Label>
-                  <Input
-                    type="number"
-                    value={baseRate}
-                    onChange={(e) => setBaseRate(e.target.value)}
-                  />
-                </InputWrapper>
-                <InputWrapper style={{ gridColumn: '2', gridRow: '1' }}>
-                  <Label>Multiplier</Label>
-                  <Input
-                    type="number"
-                    value={multiplier}
-                    onChange={(e) => setMultiplier(e.target.value)}
-                  />
-                </InputWrapper>
-                <ToggleContainer style={{ gridColumn: '1', gridRow: '2' }}>
-                  <Label>Cap Matrix</Label>
-                  <ToggleWrapper>
-                    <ToggleInput
-                      type="checkbox"
-                      checked={capEnabled}
-                      onChange={(e) => setCapEnabled(e.target.checked)}
-                    />
-                    <ToggleSlider />
-                  </ToggleWrapper>
-                </ToggleContainer>
-                <InputWrapper style={{ 
-                  gridColumn: '2', 
-                  gridRow: '2',
-                  visibility: capEnabled ? 'visible' : 'hidden' 
-                }}>
+          <InputsContainer>
+            <LeftInputs>
+              <InputWrapper>
+                <Label>Base Rate</Label>
+                <Input
+                  type="number"
+                  value={baseRate}
+                  onChange={(e) => setBaseRate(e.target.value)}
+                />
+              </InputWrapper>
+              <InputWrapper>
+                <Label>Multiplier</Label>
+                <Input
+                  type="number"
+                  value={multiplier}
+                  onChange={(e) => setMultiplier(e.target.value)}
+                />
+              </InputWrapper>
+            </LeftInputs>
+            <RightInputs>
+              {capEnabled && (
+                <InputWrapper>
                   <Label>Cap Hour</Label>
                   <Input
                     type="number"
@@ -362,18 +389,29 @@ function GridCalculator() {
                     min="0"
                   />
                 </InputWrapper>
-              </InputGroup>
-            </InputsContainer>
-          </HeaderContainer>
-          <TableContainer>
+              )}
+              <ToggleContainer>
+                <Label>Cap Matrix</Label>
+                <ToggleWrapper>
+                  <ToggleInput
+                    type="checkbox"
+                    checked={capEnabled}
+                    onChange={(e) => setCapEnabled(e.target.checked)}
+                  />
+                  <ToggleSlider />
+                </ToggleWrapper>
+              </ToggleContainer>
+            </RightInputs>
+          </InputsContainer>
+          {showGraph ? (
+            <Graph data={graphData} baseRate={baseRate} showDollarAmount={showDollarAmount} theme={theme} />
+          ) : (
             <Table>
               <thead>
                 <tr>
                   <Th>Labor Time</Th>
                   {increments.map((inc) => (
-                    <Th key={inc} isFirstRow>
-                      {inc.toFixed(1)}
-                    </Th>
+                    <Th key={inc}>{inc.toFixed(1)}</Th>
                   ))}
                 </tr>
               </thead>
@@ -382,7 +420,7 @@ function GridCalculator() {
                   <tr key={hourRate}>
                     <Td isFirstColumn>{hourRate.toFixed(1)}</Td>
                     {increments.map((inc) => (
-                      <Td 
+                      <Td
                         key={inc}
                         onMouseEnter={(e) => handleMouseEnter(e, hourRate, inc)}
                         onMouseLeave={handleMouseLeave}
@@ -394,15 +432,13 @@ function GridCalculator() {
                 ))}
               </tbody>
             </Table>
-          </TableContainer>
+          )}
         </Card>
-        <Tooltip 
-          show={tooltip.show}
-          x={tooltip.x}
-          y={tooltip.y}
-        >
-          {tooltip.content}
-        </Tooltip>
+        {!showGraph && (
+          <Tooltip show={tooltip.show} x={tooltip.x} y={tooltip.y}>
+            {tooltip.content}
+          </Tooltip>
+        )}
       </AppContainer>
     </ThemeProvider>
   );

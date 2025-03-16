@@ -1,6 +1,6 @@
 {
   "name": "grid-calculator",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "private": true,
   "homepage": "https://kcahrens.github.io/grid-calculator-v-1.1.1/",
   "dependencies": {
@@ -12,6 +12,7 @@
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",
     "react-scripts": "5.0.1",
+    "recharts": "^2.15.1",
     "styled-components": "^6.1.15",
     "web-vitals": "^2.1.4"
   },

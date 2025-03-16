@@ -1,8 +1,13 @@
+// src/App.js
 import React from 'react';
-import GridCalculator from './GridCalculator';
+import GridCalculator from './components/GridCalculator'; // Updated path
 
 function App() {
-  return <GridCalculator />;
+  return ( 
+    <div>
+      <GridCalculator />
+    </div>
+  );
 }
 
 export default App;
