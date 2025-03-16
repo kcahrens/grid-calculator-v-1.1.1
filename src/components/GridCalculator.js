@@ -378,11 +378,11 @@ function GridCalculator() {
                 <RiExchangeDollarLine size={24} />
               </IconButton>
             )}
-            <IconButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
-              <RiTableLine size={24} />
-            </IconButton>
             <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
               <RiLineChartLine size={24} />
+            </IconButton>
+            <IconButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
+              <RiTableLine size={24} />
             </IconButton>
             <IconButton onClick={() => setViewMode('calculator')} active={viewMode === 'calculator'}>
               <RiFlashlightLine size={24} />
