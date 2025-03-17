@@ -1,8 +1,16 @@
+// to do list:
+// verify grid calcuations are correct, right now if you use and agresssive calcuation it is stepped, not a smooth curve
+      // make an option to have a the limit start a scale down back to the door rate. 
+// mobile view the margins are white, too thin likely -- not just mobile, any browser with right to left scroll you get that white area. 
+
+// we make need to make this write to a table so you can use in ASR / other VMA areas like menu???? more of a question for MR Rino
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // src/components/GridCalculator.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import styled, { ThemeProvider } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line } from 'react-icons/ri';
-import Graph from './Graph'; 
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine } from 'react-icons/ri';
+import Graph from './Graph';
 
 // Define themes with disabled styles
 const lightTheme = {
@@ -36,11 +44,14 @@ const AppContainer = styled.div`
   background-color: ${({ theme }) => theme.background};
   color: ${({ theme }) => theme.text};
   min-height: 100vh;
+  width: 100vw;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 40px 20px;
   position: relative;
+  box-sizing: border-box;
+  margin: 0;
 `;
 
 const Header = styled.header`
@@ -50,6 +61,7 @@ const Header = styled.header`
   width: 100%;
   max-width: 1200px;
   margin-bottom: 20px;
+  gap: 20px; /* Add gap to prevent immediate overlap */
   @media (max-width: 600px) {
     flex-direction: column;
     gap: 10px;
@@ -63,14 +75,22 @@ const Title = styled.h1`
   color: ${({ theme }) => theme.text};
   text-align: center;
   letter-spacing: -0.5px;
+  margin: 0;
+  flex: 0 0 auto; /* Don’t let title shrink */
   @media (max-width: 600px) {
     font-size: 28px;
   }
 `;
 
 const SearchableSelectContainer = styled.div`
-  position: relative;
-  width: 300px;
+  flex: 1 1 auto; /* Grow and shrink, with a basis of auto */
+  min-width: 200px; /* Minimum width to stay usable */
+  max-width: 472px; /* Max width from previous adjustment */
+  width: 100%; /* Allow full width within flex constraints */
+  @media (max-width: 600px) {
+    width: 100%;
+    max-width: 472px;
+  }
 `;
 
 const SearchInputWrapper = styled.div`
@@ -142,6 +162,7 @@ const ButtonGroup = styled.div`
   display: flex;
   gap: 10px;
   align-items: center;
+  flex: 0 0 auto; /* Don’t let buttons shrink */
 `;
 
 const IconButton = styled.button`
@@ -166,7 +187,8 @@ const ExportDropdown = styled.div`
 
 const ExportMenu = styled.div`
   position: absolute;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
   top: 100%;
   background-color: ${({ theme }) => theme.cardBg};
   border: 1px solid ${({ theme }) => theme.border};
@@ -362,12 +384,13 @@ const Td = styled.td`
   font-size: 14px;
   font-weight: ${({ isFirstColumn }) => (isFirstColumn ? '700' : '400')};
   color: ${({ theme }) => theme.text};
+  cursor: ${({ isFirstColumn }) => (isFirstColumn ? 'default' : 'pointer')};
 `;
 
 const Tooltip = styled.div`
   position: absolute;
-  background-color: ${({ theme }) => theme.cardBg};
-  color: ${({ theme }) => theme.text};
+  background-color: ${({ theme }) => theme.tooltipBg};
+  color: ${({ theme }) => theme.tooltipText};
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.border};
@@ -379,6 +402,7 @@ const Tooltip = styled.div`
   top: ${({ y }) => y}px;
   left: ${({ x }) => x}px;
   visibility: ${({ show }) => (show ? 'visible' : 'hidden')};
+  white-space: pre-line;
 `;
 
 const CalculatorContainer = styled.div`
@@ -388,19 +412,57 @@ const CalculatorContainer = styled.div`
   gap: 20px;
 `;
 
+const ResultContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
 const ResultText = styled.p`
   font-size: 18px;
   font-weight: 600;
   color: ${({ theme }) => theme.text};
+  margin: 0;
 `;
 
+const CopyButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.text};
+  font-size: 18px;
+  padding: 0;
+  &:hover {
+    color: ${({ theme }) => theme.accent};
+  }
+`;
+
+const CopyToast = styled.div`
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: ${({ theme }) => theme.accent};
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 2000;
+  opacity: ${({ show }) => (show ? 1 : 0)};
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+`;
+
+// Store Dropdown Component
 const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef(null);
 
-  const stores = ["Store A", "Store B", "Store C"];   // all stores user has access to ideally
+  const stores = ["Store A", "Store B", "Store C"];
 
   const filteredStores = stores.filter(store =>
     store.toLowerCase().includes(searchTerm.toLowerCase())
@@ -414,11 +476,8 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
         setHighlightedIndex(-1);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleSelect = (store) => {
@@ -431,16 +490,11 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
   const handleKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (!isOpen) {
-        setIsOpen(true);
-      } else {
-        setHighlightedIndex(prev => prev === -1 ? 0 : Math.min(prev + 1, filteredStores.length - 1));
-      }
+      if (!isOpen) setIsOpen(true);
+      else setHighlightedIndex(prev => prev === -1 ? 0 : Math.min(prev + 1, filteredStores.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (isOpen) {
-        setHighlightedIndex(prev => prev === -1 ? filteredStores.length - 1 : Math.max(prev - 1, 0));
-      }
+      if (isOpen) setHighlightedIndex(prev => prev === -1 ? filteredStores.length - 1 : Math.max(prev - 1, 0));
     } else if (e.key === 'Enter' && highlightedIndex >= 0) {
       e.preventDefault();
       handleSelect(filteredStores[highlightedIndex]);
@@ -477,9 +531,7 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
             <span>{store}</span>
             <div style={{ flexGrow: 1 }} />
             {storeLocks[store]?.isLocked && (
-              <RiLockLine 
-                title={`Locked at: ${new Date(storeLocks[store].lockedAt).toLocaleString()} // this would also include the user name that locked it`}
-              />
+              <RiLockLine title={`Locked at: ${new Date(storeLocks[store].lockedAt).toLocaleString()}`} />
             )}
           </OptionItem>
         ))}
@@ -488,6 +540,7 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
   );
 };
 
+// Main Component
 function GridCalculator() {
   const [selectedStore, setSelectedStore] = useState("Store A");
   const [storeConfigs, setStoreConfigs] = useState({
@@ -505,15 +558,27 @@ function GridCalculator() {
   const [showDollarAmount, setShowDollarAmount] = useState(false);
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: '' });
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showCopyToast, setShowCopyToast] = useState(false);
+  const dropdownRef = useRef(null);
+  const lockButtonRef = useRef(null);
+  let longPressTimer;
 
   useEffect(() => {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setTheme(prefersDark ? 'dark' : 'light');
   }, []);
 
-  const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
-  };
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
   const toggleLock = () => {
     setStoreLocks(prev => ({
@@ -525,20 +590,10 @@ function GridCalculator() {
     }));
   };
 
-  const handleExportPDF = () => {
-    // Rino, this would genorate a PDF of the grid
-    setShowExportMenu(false);
-  };
+  const handleExportPDF = () => setShowExportMenu(false); // Placeholder
+  const handleExportExcel = () => setShowExportMenu(false); // Placeholder
 
-  const handleExportExcel = () => {
-    // use API to generate Excel of the grid
-    setShowExportMenu(false);
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleString();
-  };
+  const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleString() : '';
 
   const hourRates = Array.from({ length: 21 }, (_, i) => i);
   const increments = Array.from({ length: 10 }, (_, i) => i * 0.1);
@@ -549,15 +604,10 @@ function GridCalculator() {
     const numMultiplier = Number(multiplier) || 0;
     const totalHours = hourRate + increment;
 
-    if (hourRate === 0) {
-      return totalHours * numBaseRate;
-    }
+    if (hourRate === 0) return totalHours * numBaseRate;
 
     let effectiveHourRate = hourRate;
-    let adjustment =
-      hourRate === 1 || numMultiplier === 0
-        ? 0
-        : (effectiveHourRate * (numMultiplier / 10)) + increment;
+    let adjustment = hourRate === 1 || numMultiplier === 0 ? 0 : (effectiveHourRate * (numMultiplier / 10)) + increment;
     let value = totalHours * (numBaseRate + adjustment);
 
     if (!isCapCalculation && capEnabled && capValue !== '') {
@@ -570,7 +620,6 @@ function GridCalculator() {
         value = totalHours * cappedELR;
       }
     }
-
     return value;
   };
 
@@ -594,7 +643,7 @@ function GridCalculator() {
   const handleMouseEnter = (e, hourRate, increment) => {
     const totalAmount = calculateValue(hourRate, increment, storeConfigs[selectedStore]);
     const totalHours = hourRate + increment;
-    let elr = totalHours === 0 ? 'N/A' : (totalAmount / totalHours).toFixed(2);
+    let elr = totalHours === 0 ? 'N/A' : totalAmount / totalHours;
     const rect = e.target.getBoundingClientRect();
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
@@ -602,11 +651,30 @@ function GridCalculator() {
       show: true,
       x: rect.left + rect.width / 2 + scrollLeft,
       y: rect.top - 10 + scrollTop,
-      content: `ELR: $${elr}/hr`,
+      content: `Hours: ${totalHours.toFixed(1)}\nELR: $${elr.toFixed(2)}`
     });
   };
 
-  const handleMouseLeave = () => {
+  const handleMouseLeave = () => setTooltip({ show: false, x: 0, y: 0, content: '' });
+
+  const handleTouchStart = () => {
+    longPressTimer = setTimeout(() => {
+      if (lockButtonRef.current) {
+        const rect = lockButtonRef.current.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        setTooltip({
+          show: true,
+          x: rect.left + rect.width / 2 + scrollLeft,
+          y: rect.top - 10 + scrollTop,
+          content: storeLocks[selectedStore].isLocked ? `Locked at: ${formatDate(storeLocks[selectedStore].lockedAt)}` : 'Unlocked'
+        });
+      }
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    clearTimeout(longPressTimer);
     setTooltip({ show: false, x: 0, y: 0, content: '' });
   };
 
@@ -618,16 +686,38 @@ function GridCalculator() {
     totalAmount = calculateValue(hourRate, increment, storeConfigs[selectedStore]);
   }
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+      .then(() => console.log(`Copied: ${text}`))
+      .catch(err => console.error('Failed to copy: ', err));
+  };
+
+  const handleCopyTotalAmount = () => {
+    copyToClipboard(totalAmount.toFixed(2));
+    triggerCopyToast();
+  };
+
+  const handleGridCellClick = (value) => {
+    copyToClipboard(value.toString());
+    triggerCopyToast();
+  };
+
+  const triggerCopyToast = () => {
+    setShowCopyToast(true);
+    setTimeout(() => setShowCopyToast(false), 1500); // Hide after 1.5 seconds
+  };
+
+  const onCopyValue = (value) => {
+    copyToClipboard(value);
+    triggerCopyToast();
+  };
+
   return (
     <ThemeProvider theme={theme === 'light' ? lightTheme : darkTheme}>
       <AppContainer>
         <Header>
           <Title>Labor Rate Matrix</Title>
-          <StoreDropdown 
-            selectedStore={selectedStore} 
-            setSelectedStore={setSelectedStore} 
-            storeLocks={storeLocks} 
-          />
+          <StoreDropdown selectedStore={selectedStore} setSelectedStore={setSelectedStore} storeLocks={storeLocks} />
           <ButtonGroup>
             {viewMode === 'graph' && (
               <IconButton onClick={() => setShowDollarAmount(!showDollarAmount)}>
@@ -644,14 +734,17 @@ function GridCalculator() {
               <RiFlashlightLine size={24} />
             </IconButton>
             <IconButton
+              ref={lockButtonRef}
               onClick={toggleLock}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
               isLockButton={true}
               isLocked={storeLocks[selectedStore].isLocked}
               title={storeLocks[selectedStore].isLocked ? `Locked at: ${formatDate(storeLocks[selectedStore].lockedAt)}` : ''}
             >
               {storeLocks[selectedStore].isLocked ? <RiLockLine size={24} /> : <RiLockUnlockLine size={24} />}
             </IconButton>
-            <ExportDropdown>
+            <ExportDropdown ref={dropdownRef}>
               <IconButton onClick={() => setShowExportMenu(!showExportMenu)}>
                 <RiUploadLine size={24} />
               </IconButton>
@@ -696,6 +789,27 @@ function GridCalculator() {
                   disabled={storeLocks[selectedStore].isLocked}
                 />
               </InputWrapper>
+              {viewMode === 'calculator' && (
+                <InputWrapper>
+                  <Label>Enter Hours</Label>
+                  <Input
+                    type="number"
+                    value={storeConfigs[selectedStore].inputHours}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '' || Number(value) >= 0) {
+                        setStoreConfigs(prev => ({
+                          ...prev,
+                          [selectedStore]: { ...prev[selectedStore], inputHours: value }
+                        }));
+                      }
+                    }}
+                    step="0.1"
+                    min="0"
+                    placeholder="e.g., 5.5"
+                  />
+                </InputWrapper>
+              )}
             </LeftInputs>
             <RightInputs>
               {storeConfigs[selectedStore].capEnabled && (
@@ -732,30 +846,22 @@ function GridCalculator() {
             </RightInputs>
           </InputsContainer>
           {viewMode === 'graph' ? (
-            <Graph data={graphData} baseRate={storeConfigs[selectedStore].baseRate} showDollarAmount={showDollarAmount} theme={theme} />
+            <Graph
+              data={graphData}
+              baseRate={storeConfigs[selectedStore].baseRate}
+              showDollarAmount={showDollarAmount}
+              theme={theme}
+              onCopyValue={onCopyValue}
+            />
           ) : viewMode === 'calculator' ? (
             <CalculatorContainer>
-              <InputWrapper>
-                <Label>Enter Hours</Label>
-                <Input
-                  type="number"
-                  value={storeConfigs[selectedStore].inputHours}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === '' || (Number(value) >= 0)) {
-                      setStoreConfigs(prev => ({
-                        ...prev,
-                        [selectedStore]: { ...prev[selectedStore], inputHours: value }
-                      }));
-                    }
-                  }}
-                  step="0.1"
-                  min="0"
-                  placeholder="e.g., 5.5"
-                />
-              </InputWrapper>
               {storeConfigs[selectedStore].inputHours && !isNaN(numInputHours) && numInputHours >= 0 && (
-                <ResultText>Total Amount: ${totalAmount.toFixed(2)}</ResultText>
+                <ResultContainer>
+                  <ResultText>Total Amount: ${totalAmount.toFixed(2)}</ResultText>
+                  <CopyButton onClick={handleCopyTotalAmount} title="Copy Total Amount">
+                    <RiFileCopyLine />
+                  </CopyButton>
+                </ResultContainer>
               )}
             </CalculatorContainer>
           ) : (
@@ -773,15 +879,20 @@ function GridCalculator() {
                   {hourRates.map((hourRate) => (
                     <tr key={hourRate}>
                       <Td isFirstColumn>{hourRate.toFixed(1)}</Td>
-                      {increments.map((inc) => (
-                        <Td
-                          key={inc}
-                          onMouseEnter={(e) => handleMouseEnter(e, hourRate, inc)}
-                          onMouseLeave={handleMouseLeave}
-                        >
-                          {calculateValue(hourRate, inc, storeConfigs[selectedStore]).toFixed(2)}
-                        </Td>
-                      ))}
+                      {increments.map((inc) => {
+                        const value = calculateValue(hourRate, inc, storeConfigs[selectedStore]).toFixed(2);
+                        return (
+                          <Td
+                            key={inc}
+                            onMouseEnter={(e) => handleMouseEnter(e, hourRate, inc)}
+                            onMouseLeave={handleMouseLeave}
+                            onClick={() => handleGridCellClick(value)}
+                            title="Click to copy"
+                          >
+                            {value}
+                          </Td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -789,11 +900,10 @@ function GridCalculator() {
             </TableContainer>
           )}
         </Card>
-        {viewMode === 'grid' && (
-          <Tooltip show={tooltip.show} x={tooltip.x} y={tooltip.y}>
-            {tooltip.content}
-          </Tooltip>
-        )}
+        <Tooltip show={tooltip.show} x={tooltip.x} y={tooltip.y}>
+          {tooltip.content}
+        </Tooltip>
+        <CopyToast show={showCopyToast}>Copied!</CopyToast>
       </AppContainer>
     </ThemeProvider>
   );
