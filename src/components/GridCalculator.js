@@ -61,7 +61,7 @@ const Header = styled.header`
   width: 100%;
   max-width: 1200px;
   margin-bottom: 20px;
-  gap: 20px; /* Add gap to prevent immediate overlap */
+  gap: 20px;
   @media (max-width: 600px) {
     flex-direction: column;
     gap: 10px;
@@ -76,17 +76,18 @@ const Title = styled.h1`
   text-align: center;
   letter-spacing: -0.5px;
   margin: 0;
-  flex: 0 0 auto; /* Don’t let title shrink */
+  flex: 0 0 auto;
   @media (max-width: 600px) {
     font-size: 28px;
   }
 `;
 
 const SearchableSelectContainer = styled.div`
-  flex: 1 1 auto; /* Grow and shrink, with a basis of auto */
-  min-width: 200px; /* Minimum width to stay usable */
-  max-width: 472px; /* Max width from previous adjustment */
-  width: 100%; /* Allow full width within flex constraints */
+  position: relative; /* Fix for dropdown positioning */
+  flex: 1 1 auto;
+  min-width: 200px;
+  max-width: 472px;
+  width: 100%;
   @media (max-width: 600px) {
     width: 100%;
     max-width: 472px;
@@ -162,7 +163,7 @@ const ButtonGroup = styled.div`
   display: flex;
   gap: 10px;
   align-items: center;
-  flex: 0 0 auto; /* Don’t let buttons shrink */
+  flex: 0 0 auto;
 `;
 
 const IconButton = styled.button`
@@ -174,10 +175,10 @@ const IconButton = styled.button`
     isLockButton && isLocked ? '#ff0000' : (active ? '#fff' : theme.text)};
   border-radius: 8px;
   &:hover {
-    background: ${({ theme, isLockButton, isLocked }) => 
-      isLockButton && isLocked ? 'rgba(255, 0, 0, 0.1)' : theme.accent};
-    color: ${({ isLockButton, isLocked }) => 
-      isLockButton && isLocked ? '#ff0000' : '#fff'};
+    background: ${({ theme, isLockButton, isLocked, noHover }) => 
+      noHover ? 'none' : (isLockButton && isLocked ? 'rgba(255, 0, 0, 0.1)' : theme.accent)};
+    color: ${({ isLockButton, isLocked, noHover, theme }) => 
+      noHover ? (isLockButton && isLocked ? '#ff0000' : theme.text) : (isLockButton && isLocked ? '#ff0000' : '#fff')};
   }
 `;
 
@@ -510,6 +511,7 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
           onChange={(e) => {
             setSearchTerm(e.target.value);
             setHighlightedIndex(-1);
+            if (!isOpen) setIsOpen(true);
           }}
           onFocus={() => {
             setIsOpen(true);
@@ -590,8 +592,8 @@ function GridCalculator() {
     }));
   };
 
-  const handleExportPDF = () => setShowExportMenu(false); // Placeholder
-  const handleExportExcel = () => setShowExportMenu(false); // Placeholder
+  const handleExportPDF = () => setShowExportMenu(false);
+  const handleExportExcel = () => setShowExportMenu(false);
 
   const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleString() : '';
 
@@ -704,7 +706,7 @@ function GridCalculator() {
 
   const triggerCopyToast = () => {
     setShowCopyToast(true);
-    setTimeout(() => setShowCopyToast(false), 1500); // Hide after 1.5 seconds
+    setTimeout(() => setShowCopyToast(false), 1500);
   };
 
   const onCopyValue = (value) => {
@@ -720,7 +722,7 @@ function GridCalculator() {
           <StoreDropdown selectedStore={selectedStore} setSelectedStore={setSelectedStore} storeLocks={storeLocks} />
           <ButtonGroup>
             {viewMode === 'graph' && (
-              <IconButton onClick={() => setShowDollarAmount(!showDollarAmount)}>
+              <IconButton onClick={() => setShowDollarAmount(!showDollarAmount)} noHover={true}>
                 <RiExchangeDollarLine size={24} />
               </IconButton>
             )}
