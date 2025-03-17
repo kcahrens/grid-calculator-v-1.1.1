@@ -8,11 +8,11 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // src/components/GridCalculator.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import styled, { ThemeProvider } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine } from 'react-icons/ri';
+import styled, { ThemeProvider, keyframes } from 'styled-components';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill } from 'react-icons/ri';
 import Graph from './Graph';
 
-// Define themes with disabled styles
+// Themes
 const lightTheme = {
   background: '#f5f7fa',
   cardBg: '#ffffff',
@@ -39,7 +39,34 @@ const darkTheme = {
   disabledText: '#707070'
 };
 
-// Styled components
+// Keyframes for fade animations
+const fadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const fadeOut = keyframes`
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+`;
+
+// Styled Components
+const AnimatedDiv = styled.div`
+  animation: ${({ isVisible }) => (isVisible ? fadeIn : fadeOut)} 0.3s ease-in-out forwards;
+`;
+
 const AppContainer = styled.div`
   background-color: ${({ theme }) => theme.background};
   color: ${({ theme }) => theme.text};
@@ -83,7 +110,7 @@ const Title = styled.h1`
 `;
 
 const SearchableSelectContainer = styled.div`
-  position: relative; /* Fix for dropdown positioning */
+  position: relative;
   flex: 1 1 auto;
   min-width: 200px;
   max-width: 472px;
@@ -169,16 +196,17 @@ const ButtonGroup = styled.div`
 const IconButton = styled.button`
   background: ${({ active, theme }) => (active ? theme.accent : 'none')};
   border: none;
-  cursor: pointer;
+  cursor: ${({ disabled }) => (disabled ? 'not-allowed' : 'pointer')};
   padding: 8px;
-  color: ${({ active, theme, isLockButton, isLocked }) => 
-    isLockButton && isLocked ? '#ff0000' : (active ? '#fff' : theme.text)};
+  color: ${({ active, theme, isLockButton, isLocked, disabled }) => 
+    disabled ? theme.disabledText : (isLockButton && isLocked ? '#ff0000' : (active ? '#fff' : theme.text))};
   border-radius: 8px;
+  opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
   &:hover {
-    background: ${({ theme, isLockButton, isLocked, noHover }) => 
-      noHover ? 'none' : (isLockButton && isLocked ? 'rgba(255, 0, 0, 0.1)' : theme.accent)};
-    color: ${({ isLockButton, isLocked, noHover, theme }) => 
-      noHover ? (isLockButton && isLocked ? '#ff0000' : theme.text) : (isLockButton && isLocked ? '#ff0000' : '#fff')};
+    background: ${({ theme, isLockButton, isLocked, noHover, disabled }) => 
+      disabled ? 'none' : (noHover ? 'none' : (isLockButton && isLocked ? 'rgba(255, 0, 0, 0.1)' : theme.accent))};
+    color: ${({ isLockButton, isLocked, noHover, theme, disabled }) => 
+      disabled ? theme.disabledText : (noHover ? (isLockButton && isLocked ? '#ff0000' : theme.text) : (isLockButton && isLocked ? '#ff0000' : '#fff'))};
   }
 `;
 
@@ -263,15 +291,13 @@ const RightInputs = styled.div`
   }
 `;
 
-const InputWrapper = styled.div`
+const ModeSwitches = styled.div`
   display: flex;
-  flex-direction: column;
+  gap: 10px;
   align-items: center;
-  gap: 5px;
-  min-width: 120px;
 `;
 
-const ToggleContainer = styled.div`
+const InputWrapper = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -306,50 +332,6 @@ const Input = styled.input`
     color: ${({ theme }) => theme.disabledText};
     cursor: not-allowed;
   }
-`;
-
-const ToggleWrapper = styled.label`
-  position: relative;
-  display: inline-block;
-  width: 50px;
-  height: 24px;
-`;
-
-const ToggleInput = styled.input`
-  opacity: 0;
-  width: 0;
-  height: 0;
-  &:checked + span {
-    background-color: ${({ theme, disabled }) => (disabled ? theme.disabledBg : theme.accent)};
-  }
-  &:checked + span:before {
-    transform: translateX(26px);
-  }
-`;
-
-const ToggleSlider = styled.span`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: ${({ theme, disabled, checked }) =>
-    disabled ? theme.disabledBg : (checked ? theme.accent : theme.border)};
-  border-radius: 24px;
-  &:before {
-    position: absolute;
-    content: '';
-    height: 20px;
-    width: 20px;
-    left: 2px;
-    bottom: 2px;
-    background-color: ${({ theme, disabled }) =>
-      disabled ? theme.disabledText : theme.text};
-    border-radius: 50%;
-    transition: transform 0.3s ease;
-    transform: ${({ checked }) => (checked ? 'translateX(26px)' : 'translateX(0)')};
-  }
-  cursor: ${({ disabled }) => (disabled ? 'not-allowed' : 'pointer')};
 `;
 
 const TableContainer = styled.div`
@@ -456,6 +438,27 @@ const CopyToast = styled.div`
   pointer-events: none;
 `;
 
+// FadeWrapper Component for smooth transitions
+const FadeWrapper = ({ show, children }) => {
+  const [shouldRender, setShouldRender] = useState(show);
+
+  useEffect(() => {
+    if (show) {
+      setShouldRender(true); // Mount immediately when show is true
+    } else {
+      // Delay unmounting to allow fade-out animation
+      const timer = setTimeout(() => setShouldRender(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [show]);
+
+  return shouldRender ? (
+    <AnimatedDiv isVisible={show}>
+      {children}
+    </AnimatedDiv>
+  ) : null;
+};
+
 // Store Dropdown Component
 const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -546,9 +549,9 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
 function GridCalculator() {
   const [selectedStore, setSelectedStore] = useState("Store A");
   const [storeConfigs, setStoreConfigs] = useState({
-    "Store A": { baseRate: '100', multiplier: '10', capEnabled: false, capValue: '', inputHours: '' },
-    "Store B": { baseRate: '100', multiplier: '10', capEnabled: false, capValue: '', inputHours: '' },
-    "Store C": { baseRate: '100', multiplier: '10', capEnabled: false, capValue: '', inputHours: '' }
+    "Store A": { baseRate: '100', increasePerHour: '10', peakHours: '5', mode: 'mirror', q: '', inputHours: '' },
+    "Store B": { baseRate: '100', increasePerHour: '10', peakHours: '5', mode: 'mirror', q: '', inputHours: '' },
+    "Store C": { baseRate: '100', increasePerHour: '10', peakHours: '5', mode: 'mirror', q: '', inputHours: '' }
   });
   const [storeLocks, setStoreLocks] = useState({
     "Store A": { isLocked: false, lockedAt: null },
@@ -556,7 +559,7 @@ function GridCalculator() {
     "Store C": { isLocked: false, lockedAt: null }
   });
   const [theme, setTheme] = useState('light');
-  const [viewMode, setViewMode] = useState('calculator');
+  const [viewMode, setViewMode] = useState('grid');
   const [showDollarAmount, setShowDollarAmount] = useState(false);
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: '' });
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -600,29 +603,52 @@ function GridCalculator() {
   const hourRates = Array.from({ length: 21 }, (_, i) => i);
   const increments = Array.from({ length: 10 }, (_, i) => i * 0.1);
 
-  const calculateValue = (hourRate, increment, config, isCapCalculation = false) => {
-    const { baseRate, multiplier, capEnabled, capValue } = config;
+  const calculateValue = (totalHours, config) => {
+    const { baseRate, increasePerHour, mode, peakHours, q } = config;
     const numBaseRate = Number(baseRate) || 0;
-    const numMultiplier = Number(multiplier) || 0;
-    const totalHours = hourRate + increment;
+    const numIncreasePerHour = Number(increasePerHour) || 0;
+    const numPeakHours = Number(peakHours) || 0;
+    const numQ = Number(q) || 0;
 
-    if (hourRate === 0) return totalHours * numBaseRate;
+    if (totalHours <= 0) return 0;
 
-    let effectiveHourRate = hourRate;
-    let adjustment = hourRate === 1 || numMultiplier === 0 ? 0 : (effectiveHourRate * (numMultiplier / 10)) + increment;
-    let value = totalHours * (numBaseRate + adjustment);
-
-    if (!isCapCalculation && capEnabled && capValue !== '') {
-      const cap = Number(capValue);
-      if (cap > 0 && totalHours >= cap) {
-        const capHourRate = Math.floor(cap);
-        const capIncrement = cap - capHourRate;
-        const capValueAtLimit = calculateValue(capHourRate, capIncrement, config, true);
-        const cappedELR = capValueAtLimit / cap;
-        value = totalHours * cappedELR;
+    let elr;
+    if (mode === 'infinity') {
+      elr = numBaseRate + (totalHours - 1) * numIncreasePerHour;
+    } else if (mode === 'mirror') {
+      if (totalHours <= numPeakHours) {
+        elr = numBaseRate + (totalHours - 1) * numIncreasePerHour;
+      } else {
+        const mirroredHour = 2 * numPeakHours - totalHours;
+        elr = numBaseRate + Math.max(0, (mirroredHour - 1)) * numIncreasePerHour;
       }
+    } else if (mode === 'proportional') {
+      if (totalHours <= numPeakHours) {
+        elr = numBaseRate + (totalHours - 1) * numIncreasePerHour;
+      } else {
+        const maxIncrease = (numPeakHours - 1) * numIncreasePerHour;
+        if (numQ > numPeakHours) {
+          const decreasePerHour = maxIncrease / (numQ - numPeakHours);
+          const decrease = (totalHours - numPeakHours) * decreasePerHour;
+          elr = numBaseRate + maxIncrease - decrease;
+          if (elr < numBaseRate) elr = numBaseRate;
+        } else {
+          elr = numBaseRate + maxIncrease;
+        }
+      }
+    } else if (mode === 'hoursCap') {
+      if (totalHours <= numPeakHours) {
+        elr = numBaseRate + (totalHours - 1) * numIncreasePerHour;
+      } else {
+        elr = numBaseRate + (numPeakHours - 1) * numIncreasePerHour;
+      }
+    } else {
+      elr = numBaseRate;
     }
-    return value;
+
+    elr = Math.max(elr, numBaseRate);
+    const totalAmount = elr * totalHours;
+    return totalAmount;
   };
 
   const generateGraphData = (config) => {
@@ -630,8 +656,8 @@ function GridCalculator() {
     hourRates.forEach((hourRate) => {
       increments.forEach((inc) => {
         const totalHours = hourRate + inc;
-        if (totalHours >= 1.0) {
-          const totalAmount = calculateValue(hourRate, inc, config);
+        if (totalHours >= 0) {
+          const totalAmount = calculateValue(totalHours, config);
           const elr = totalHours > 0 ? parseFloat((totalAmount / totalHours).toFixed(2)) : 0;
           data.push({ hours: totalHours, elr, totalAmount });
         }
@@ -642,10 +668,10 @@ function GridCalculator() {
 
   const graphData = useMemo(() => generateGraphData(storeConfigs[selectedStore]), [selectedStore, storeConfigs]);
 
-  const handleMouseEnter = (e, hourRate, increment) => {
-    const totalAmount = calculateValue(hourRate, increment, storeConfigs[selectedStore]);
-    const totalHours = hourRate + increment;
-    let elr = totalHours === 0 ? 'N/A' : totalAmount / totalHours;
+  const handleMouseEnter = (e, hourRate, inc) => {
+    const totalHours = hourRate + inc;
+    const totalAmount = calculateValue(totalHours, storeConfigs[selectedStore]);
+    const elr = totalHours > 0 ? (totalAmount / totalHours).toFixed(2) : 'N/A';
     const rect = e.target.getBoundingClientRect();
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
@@ -653,7 +679,7 @@ function GridCalculator() {
       show: true,
       x: rect.left + rect.width / 2 + scrollLeft,
       y: rect.top - 10 + scrollTop,
-      content: `Hours: ${totalHours.toFixed(1)}\nELR: $${elr.toFixed(2)}`
+      content: `Hours: ${totalHours.toFixed(1)}\nELR: $${elr}`
     });
   };
 
@@ -683,9 +709,7 @@ function GridCalculator() {
   const numInputHours = Number(storeConfigs[selectedStore].inputHours);
   let totalAmount = 0;
   if (!isNaN(numInputHours) && numInputHours >= 0) {
-    const hourRate = Math.floor(numInputHours);
-    const increment = numInputHours - hourRate;
-    totalAmount = calculateValue(hourRate, increment, storeConfigs[selectedStore]);
+    totalAmount = calculateValue(numInputHours, storeConfigs[selectedStore]);
   }
 
   const copyToClipboard = (text) => {
@@ -714,6 +738,15 @@ function GridCalculator() {
     triggerCopyToast();
   };
 
+  const modes = [
+    { name: 'infinity', icon: RiInfinityLine },
+    { name: 'hoursCap', icon: RiTimeLine },
+    { name: 'mirror', icon: RiTentFill },
+    { name: 'proportional', icon: RiCrosshair2Fill }
+  ];
+
+  const isLocked = storeLocks[selectedStore].isLocked;
+
   return (
     <ThemeProvider theme={theme === 'light' ? lightTheme : darkTheme}>
       <AppContainer>
@@ -741,10 +774,10 @@ function GridCalculator() {
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
               isLockButton={true}
-              isLocked={storeLocks[selectedStore].isLocked}
-              title={storeLocks[selectedStore].isLocked ? `Locked at: ${formatDate(storeLocks[selectedStore].lockedAt)}` : ''}
+              isLocked={isLocked}
+              title={isLocked ? `Locked at: ${formatDate(storeLocks[selectedStore].lockedAt)}` : ''}
             >
-              {storeLocks[selectedStore].isLocked ? <RiLockLine size={24} /> : <RiLockUnlockLine size={24} />}
+              {isLocked ? <RiLockLine size={24} /> : <RiLockUnlockLine size={24} />}
             </IconButton>
             <ExportDropdown ref={dropdownRef}>
               <IconButton onClick={() => setShowExportMenu(!showExportMenu)}>
@@ -776,75 +809,93 @@ function GridCalculator() {
                     ...prev,
                     [selectedStore]: { ...prev[selectedStore], baseRate: e.target.value }
                   }))}
-                  disabled={storeLocks[selectedStore].isLocked}
+                  disabled={isLocked}
                 />
               </InputWrapper>
-              <InputWrapper>
-                <Label>Multiplier</Label>
-                <Input
-                  type="number"
-                  value={storeConfigs[selectedStore].multiplier}
-                  onChange={(e) => setStoreConfigs(prev => ({
-                    ...prev,
-                    [selectedStore]: { ...prev[selectedStore], multiplier: e.target.value }
-                  }))}
-                  disabled={storeLocks[selectedStore].isLocked}
-                />
-              </InputWrapper>
-              {viewMode === 'calculator' && (
-                <InputWrapper>
-                  <Label>Enter Hours</Label>
-                  <Input
-                    type="number"
-                    value={storeConfigs[selectedStore].inputHours}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === '' || Number(value) >= 0) {
-                        setStoreConfigs(prev => ({
+              {!isLocked && (
+                <>
+                  <InputWrapper>
+                    <Label>Increase / Hour</Label>
+                    <Input
+                      type="number"
+                      value={storeConfigs[selectedStore].increasePerHour}
+                      onChange={(e) => setStoreConfigs(prev => ({
+                        ...prev,
+                        [selectedStore]: { ...prev[selectedStore], increasePerHour: e.target.value }
+                      }))}
+                    />
+                  </InputWrapper>
+                  <FadeWrapper show={storeConfigs[selectedStore].mode !== 'infinity'}>
+                    <InputWrapper key="peakHours">
+                      <Label>Peak Hours</Label>
+                      <Input
+                        type="number"
+                        value={storeConfigs[selectedStore].peakHours}
+                        onChange={(e) => setStoreConfigs(prev => ({
                           ...prev,
-                          [selectedStore]: { ...prev[selectedStore], inputHours: value }
-                        }));
-                      }
-                    }}
-                    step="0.1"
-                    min="0"
-                    placeholder="e.g., 5.5"
-                  />
-                </InputWrapper>
+                          [selectedStore]: { ...prev[selectedStore], peakHours: e.target.value }
+                        }))}
+                        step="0.1"
+                        min="0"
+                      />
+                    </InputWrapper>
+                  </FadeWrapper>
+                  <FadeWrapper show={storeConfigs[selectedStore].mode === 'proportional'}>
+                    <InputWrapper key="decreaseToHour">
+                      <Label>Decrease To Hour (q)</Label>
+                      <Input
+                        type="number"
+                        value={storeConfigs[selectedStore].q}
+                        onChange={(e) => setStoreConfigs(prev => ({
+                          ...prev,
+                          [selectedStore]: { ...prev[selectedStore], q: e.target.value }
+                        }))}
+                        step="0.1"
+                        min={Number(storeConfigs[selectedStore].peakHours) + 0.1 || 0.1}
+                      />
+                    </InputWrapper>
+                  </FadeWrapper>
+                  {viewMode === 'calculator' && (
+                    <InputWrapper key="enterHours">
+                      <Label>Enter Hours</Label>
+                      <Input
+                        type="number"
+                        value={storeConfigs[selectedStore].inputHours}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '' || Number(value) >= 0) {
+                            setStoreConfigs(prev => ({
+                              ...prev,
+                              [selectedStore]: { ...prev[selectedStore], inputHours: value }
+                            }));
+                          }
+                        }}
+                        step="0.1"
+                        min="0"
+                        placeholder="e.g., 5.5"
+                      />
+                    </InputWrapper>
+                  )}
+                </>
               )}
             </LeftInputs>
             <RightInputs>
-              {storeConfigs[selectedStore].capEnabled && (
-                <InputWrapper>
-                  <Label>Cap Hour</Label>
-                  <Input
-                    type="number"
-                    value={storeConfigs[selectedStore].capValue}
-                    onChange={(e) => setStoreConfigs(prev => ({
+              <ModeSwitches>
+                {modes.map((mode) => (
+                  <IconButton
+                    key={mode.name}
+                    onClick={() => !isLocked && setStoreConfigs(prev => ({
                       ...prev,
-                      [selectedStore]: { ...prev[selectedStore], capValue: e.target.value }
+                      [selectedStore]: { ...prev[selectedStore], mode: mode.name }
                     }))}
-                    step="0.1"
-                    min="0"
-                    disabled={storeLocks[selectedStore].isLocked}
-                  />
-                </InputWrapper>
-              )}
-              <ToggleContainer>
-                <Label>Cap Matrix</Label>
-                <ToggleWrapper>
-                  <ToggleInput
-                    type="checkbox"
-                    checked={storeConfigs[selectedStore].capEnabled}
-                    onChange={(e) => setStoreConfigs(prev => ({
-                      ...prev,
-                      [selectedStore]: { ...prev[selectedStore], capEnabled: e.target.checked }
-                    }))}
-                    disabled={storeLocks[selectedStore].isLocked}
-                  />
-                  <ToggleSlider disabled={storeLocks[selectedStore].isLocked} checked={storeConfigs[selectedStore].capEnabled} />
-                </ToggleWrapper>
-              </ToggleContainer>
+                    active={storeConfigs[selectedStore].mode === mode.name}
+                    disabled={isLocked}
+                    title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
+                  >
+                    <mode.icon size={24} />
+                  </IconButton>
+                ))}
+              </ModeSwitches>
             </RightInputs>
           </InputsContainer>
           {viewMode === 'graph' ? (
@@ -882,7 +933,7 @@ function GridCalculator() {
                     <tr key={hourRate}>
                       <Td isFirstColumn>{hourRate.toFixed(1)}</Td>
                       {increments.map((inc) => {
-                        const value = calculateValue(hourRate, inc, storeConfigs[selectedStore]).toFixed(2);
+                        const value = calculateValue(hourRate + inc, storeConfigs[selectedStore]).toFixed(2);
                         return (
                           <Td
                             key={inc}
