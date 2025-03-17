@@ -1,8 +1,4 @@
 // to do list:
-// verify grid calcuations are correct, right now if you use and agresssive calcuation it is stepped, not a smooth curve
-      // make an option to have a the limit start a scale down back to the door rate. 
-// mobile view the margins are white, too thin likely -- not just mobile, any browser with right to left scroll you get that white area. 
-
 // we make need to make this write to a table so you can use in ASR / other VMA areas like menu???? more of a question for MR Rino
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -559,7 +555,7 @@ function GridCalculator() {
     "Store C": { isLocked: false, lockedAt: null }
   });
   const [theme, setTheme] = useState('light');
-  const [viewMode, setViewMode] = useState('grid');
+  const [viewMode, setViewMode] = useState('grid'); /// this set's home page
   const [showDollarAmount, setShowDollarAmount] = useState(false);
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: '' });
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -842,7 +838,7 @@ function GridCalculator() {
                   </FadeWrapper>
                   <FadeWrapper show={storeConfigs[selectedStore].mode === 'proportional'}>
                     <InputWrapper key="decreaseToHour">
-                      <Label>Decrease To Hour (q)</Label>
+                      <Label>End Hours</Label>
                       <Input
                         type="number"
                         value={storeConfigs[selectedStore].q}
