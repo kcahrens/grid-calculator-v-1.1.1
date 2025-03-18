@@ -99,6 +99,7 @@ const Graph = ({ data, baseRate, showDollarAmount, theme, onCopyValue }) => {
           tickFormatter={(value) => Math.round(value)}
         />
         <RechartsTooltip content={<CustomTooltip baseRate={numBaseRate} theme={theme} />} />
+        {/* Purple matrix line - rendered first to appear behind */}
         <Line
           type="monotone"
           dataKey={showDollarAmount ? 'totalAmount' : 'elr'}
@@ -108,11 +109,13 @@ const Graph = ({ data, baseRate, showDollarAmount, theme, onCopyValue }) => {
           activeDot={<CustomActiveDot onCopyValue={onCopyValue} />}
           name={showDollarAmount ? 'Matrix Amount' : 'Calculated ELR'}
         />
+        {/* Red base rate line - rendered second to appear on top */}
         <Line
           type="monotone"
           dataKey={(entry) => (showDollarAmount ? entry.hours * numBaseRate : numBaseRate)}
           stroke="#ff7300"
-          strokeWidth={2}
+          strokeWidth={1}  // Thinner line
+          strokeDasharray="5 5"  // Dashed line
           dot={false}
           name={showDollarAmount ? 'Standard Amount' : 'Base Rate'}
         />
