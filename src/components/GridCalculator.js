@@ -851,28 +851,28 @@ function GridCalculator() {
                       />
                     </InputWrapper>
                   </FadeWrapper>
-                  {viewMode === 'calculator' && (
-                    <InputWrapper key="enterHours">
-                      <Label>Enter Hours</Label>
-                      <Input
-                        type="number"
-                        value={storeConfigs[selectedStore].inputHours}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === '' || Number(value) >= 0) {
-                            setStoreConfigs(prev => ({
-                              ...prev,
-                              [selectedStore]: { ...prev[selectedStore], inputHours: value }
-                            }));
-                          }
-                        }}
-                        step="0.1"
-                        min="0"
-                        placeholder="e.g., 5.5"
-                      />
-                    </InputWrapper>
-                  )}
                 </>
+              )}
+              {viewMode === 'calculator' && (
+                <InputWrapper key="enterHours">
+                  <Label>Enter Hours</Label>
+                  <Input
+                    type="number"
+                    value={storeConfigs[selectedStore].inputHours}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '' || Number(value) >= 0) {
+                        setStoreConfigs(prev => ({
+                          ...prev,
+                          [selectedStore]: { ...prev[selectedStore], inputHours: value }
+                        }));
+                      }
+                    }}
+                    step="0.1"
+                    min="0"
+                    placeholder="e.g., 5.5"
+                  />
+                </InputWrapper>
               )}
             </LeftInputs>
             <RightInputs>
