@@ -1,6 +1,6 @@
 {
   "name": "grid-calculator",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "private": true,
   "homepage": "https://kcahrens.github.io/grid-calculator-v-1.1.1/",
   "dependencies": {

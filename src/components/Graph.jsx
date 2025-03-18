@@ -124,4 +124,4 @@ const Graph = ({ data, baseRate, showDollarAmount, theme, onCopyValue }) => {
   );
 };
 
-export default Graph;
+export default Graph;s
