@@ -1179,7 +1179,7 @@ function GridCalculator() {
               {!isLocked && (
                 <>
                   <InputWrapper>
-                    <Label>Increase % / Hr</Label>
+                    <Label>Increase / Hr</Label>
                     <PercentageInputWrapper>
                       <PercentageInput
                         type="number"
