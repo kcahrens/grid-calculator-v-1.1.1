@@ -19,14 +19,14 @@ const CustomActiveDot = (props) => {
 };
 
 // Custom Tooltip Component with Full Details
-const CustomTooltip = ({ active, payload, label, baseRate, theme, calculateValue }) => {
+const CustomTooltip = ({ active, payload, label, baseRate, theme }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const hours = data.hours;
-    const matrixLabor = calculateValue(hours, { baseRate: baseRate.toString(), multiplier: '1.02', mode: 'infinity', peakHours: '', q: '15', inputHours: '' });
+    const matrixLabor = data.totalAmount; // Use precomputed value from graphData
     const baseRateLabor = hours * baseRate;
     const laborDifference = matrixLabor - baseRateLabor;
-    const matrixELR = hours > 0 ? matrixLabor / hours : 0; // Recalculate to match grid
+    const matrixELR = data.elr; // Use precomputed ELR from graphData
     const baseELR = baseRate;
     const elrDifference = matrixELR - baseELR;
 
@@ -44,7 +44,7 @@ const CustomTooltip = ({ active, payload, label, baseRate, theme, calculateValue
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
         }}
       >
-        <p>{`Hours: ${label.toFixed(1)}`}</p>
+        <p>{`Hours: ${hours.toFixed(1)}`}</p>
         <p>{`Matrix Labor: ${formatDollar(matrixLabor)}`}</p>
         <p>{`Base Rate Labor: ${formatDollar(baseRateLabor)}`}</p>
         <p>{`Difference: ${formatDollar(laborDifference)}`}</p>
@@ -59,62 +59,6 @@ const CustomTooltip = ({ active, payload, label, baseRate, theme, calculateValue
 
 const Graph = ({ data, baseRate, showDollarAmount, theme, onCopyValue }) => {
   const numBaseRate = Number(baseRate) || 0;
-
-  // CalculateValue function to match grid logic
-  const calculateValue = (totalHours, config = { baseRate: '150', multiplier: '1.02', mode: 'infinity', peakHours: '', q: '15', inputHours: '' }) => {
-    const { baseRate, multiplier, mode, peakHours, q } = config;
-    const numBaseRate = Number(baseRate) || 0;
-    const numMultiplier = Number(multiplier) || 1;
-    const numPeakHours = peakHours ? Number(peakHours) : Infinity;
-    const numQ = Number(q) || 0;
-
-    if (totalHours <= 0) return 0;
-
-    const k = Math.round(totalHours * 10);
-    let cellsPastOne = Math.max(0, k - 10);
-
-    let scalingFactor = 1;
-
-    if (mode === 'infinity' || (mode === 'hoursCap' && !peakHours)) {
-      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-    } else if (mode === 'hoursCap' && peakHours) {
-      const peakCells = Math.round(numPeakHours * 10) - 10;
-      cellsPastOne = Math.min(cellsPastOne, peakCells);
-      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-    } else if (mode === 'mirror') {
-      const peakCells = Math.round(numPeakHours * 10) - 10;
-      if (totalHours <= numPeakHours) {
-        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-      } else {
-        const cellsPastPeak = k - Math.round(numPeakHours * 10);
-        const mirroredCells = peakCells - cellsPastPeak;
-        cellsPastOne = Math.max(0, mirroredCells);
-        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-      }
-    } else if (mode === 'proportional') {
-      if (totalHours <= numPeakHours) {
-        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-      } else if (totalHours <= numQ && numQ > numPeakHours) {
-        const peakCells = Math.round(numPeakHours * 10) - 10;
-        const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-        const decreaseFactor = (totalHours - numPeakHours) / (numQ - numPeakHours);
-        scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
-      } else {
-        scalingFactor = 1;
-      }
-    }
-
-    let totalAmount = numBaseRate * scalingFactor * totalHours;
-
-    if (mode === 'hoursCap' && peakHours && totalHours > numPeakHours) {
-      const peakCells = Math.round(numPeakHours * 10) - 10;
-      const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-      const peakAmount = numBaseRate * peakScalingFactor * numPeakHours;
-      totalAmount = peakAmount + (totalHours - numPeakHours) * numBaseRate * peakScalingFactor;
-    }
-
-    return Number(totalAmount.toFixed(2));
-  };
 
   // Filter data to include only points where 0.5 <= hours <= 20.0
   const filteredData = data.filter(item => item.hours >= 0.5 && item.hours <= 20.0);
@@ -132,16 +76,32 @@ const Graph = ({ data, baseRate, showDollarAmount, theme, onCopyValue }) => {
   const minPlottedDollar = Math.min(minTotalAmount, minStandardAmount);
   const maxPlottedDollar = Math.max(maxTotalAmount, maxStandardAmount);
 
-  // Set Y-axis min and max
+  // Set Y-axis min and max with rounding to multiples
   const yMin = showDollarAmount
-    ? Math.floor(minPlottedDollar * 0.9) // Dollar graph: 90% of min plotted value
-    : Math.max(0, Math.floor(numBaseRate - 50)); // ELR graph: 50 below base rate, not below 0 (for all modes)
+    ? Math.floor((minPlottedDollar * 0.9) / 10) * 10
+    : Math.max(0, Math.floor((numBaseRate - 50) / 5) * 5);
   const yMax = showDollarAmount
-    ? Math.ceil(maxPlottedDollar * 1.1) // Dollar graph: 110% of max plotted value
-    : Math.ceil(maxPlottedELR * 1.1); // ELR graph: 110% of max ELR
+    ? Math.ceil((maxPlottedDollar * 1.1) / 10) * 10
+    : Math.ceil((maxPlottedELR * 1.1) / 5) * 5;
+
+  // Generate Y-axis ticks
+  const generateTicks = (min, max, step) => {
+    const start = Math.ceil(min / step) * step;
+    const ticks = [];
+    let current = start;
+    while (current <= max) {
+      ticks.push(current);
+      current += step;
+    }
+    return ticks;
+  };
+
+  const yTicks = showDollarAmount
+    ? generateTicks(yMin, yMax, 10)
+    : generateTicks(yMin, yMax, 5);
 
   // Define X-axis ticks
-  const xTicks = [0.5, 2.5, 5.0, 10.0, 15.0, 20.0];
+  const xTicks = [0.5, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0];
 
   return (
     <ResponsiveContainer width="100%" height={600}>
@@ -149,20 +109,21 @@ const Graph = ({ data, baseRate, showDollarAmount, theme, onCopyValue }) => {
         <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} />
         <XAxis
           dataKey="hours"
-          label={{ value: 'Hours', position: 'insideBottomRight', offset: -5 }}
+          label={{ value: 'Hours', position: 'insideBottom', offset: -10 }}
           type="number"
           domain={[0.5, 20.0]}
           ticks={xTicks}
           tickFormatter={(value) => value.toFixed(1)}
+          interval={0}
         />
         <YAxis
-          label={{ value: showDollarAmount ? 'Total Amount ($)' : 'ELR', angle: -90, position: 'insideLeft' }}
+          label={{ value: showDollarAmount ? 'Total Amount ($)' : 'ELR', angle: -90, position: 'left', offset: 10 }}
           type="number"
           domain={[yMin, yMax]}
-          tickCount={10}
-          tickFormatter={(value) => Math.round(value)}
+          ticks={yTicks}
+          tickFormatter={(value) => value.toFixed(0)}
         />
-        <RechartsTooltip content={<CustomTooltip baseRate={numBaseRate} theme={theme} calculateValue={calculateValue} />} />
+        <RechartsTooltip content={<CustomTooltip baseRate={numBaseRate} theme={theme} />} offset={15} />
         {/* Purple matrix line - rendered first to appear behind */}
         <Line
           type="monotone"

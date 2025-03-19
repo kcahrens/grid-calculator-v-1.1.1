@@ -1,6 +1,4 @@
-// to do list:
-// we make need to make this write to a table so you can use in ASR / other VMA areas like menu???? more of a question for MR Rino
-
+// GridCalculator.js
 import { useState, useEffect, useMemo, useRef } from 'react';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
 import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill } from 'react-icons/ri';
@@ -935,7 +933,7 @@ function GridCalculator() {
 
   const calculateValue = (totalHours, config = DEFAULT_STORE_CONFIG) => {
     const { baseRate, multiplier, mode, peakHours, q } = config;
-    const numBaseRate = Number(baseRate) || 0;
+    const numBaseRate = Number(baseRate) || 150; // Default to 150 if empty
     const numMultiplier = Number(multiplier) || 1;
     const numPeakHours = peakHours ? Number(peakHours) : Infinity; // If peakHours is empty, set to Infinity
     const numQ = Number(q) || 0;
@@ -965,15 +963,20 @@ function GridCalculator() {
         scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
       }
     } else if (mode === 'proportional') {
-      if (totalHours <= numPeakHours) {
-        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-      } else if (totalHours <= numQ && numQ > numPeakHours) {
-        const peakCells = Math.round(numPeakHours * 10) - 10;
-        const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-        const decreaseFactor = (totalHours - numPeakHours) / (numQ - numPeakHours);
-        scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
+      const peakCells = Math.max(0, Math.round(numPeakHours * 10) - 10);
+      if (config.q === '') {
+        const effectiveCellsPastOne = Math.min(cellsPastOne, peakCells);
+        scalingFactor = 1 + (numMultiplier - 1) * effectiveCellsPastOne;
       } else {
-        scalingFactor = 1;
+        const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
+        if (totalHours <= numPeakHours) {
+          scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+        } else if (totalHours <= numQ && numQ > numPeakHours) {
+          const decreaseFactor = (totalHours - numPeakHours) / (numQ - numPeakHours);
+          scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
+        } else {
+          scalingFactor = 1;
+        }
       }
     }
 
@@ -1138,12 +1141,13 @@ function GridCalculator() {
                 <Label>Base Rate</Label>
                 <Input
                   type="number"
-                  value={storeConfigs[selectedStore]?.baseRate || DEFAULT_STORE_CONFIG.baseRate}
+                  value={storeConfigs[selectedStore]?.baseRate}
                   onChange={(e) => setStoreConfigs(prev => ({
                     ...prev,
                     [selectedStore]: { ...prev[selectedStore], baseRate: e.target.value }
                   }))}
                   disabled={isLocked}
+                  placeholder="150"
                 />
               </InputWrapper>
               {!isLocked && (
@@ -1152,13 +1156,28 @@ function GridCalculator() {
                     <Label>Multiplier</Label>
                     <Input
                       type="number"
-                      value={storeConfigs[selectedStore]?.multiplier || DEFAULT_STORE_CONFIG.multiplier}
-                      onChange={(e) => setStoreConfigs(prev => ({
-                        ...prev,
-                        [selectedStore]: { ...prev[selectedStore], multiplier: e.target.value }
-                      }))}
+                      value={storeConfigs[selectedStore].multiplier}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        let multiplier = value;
+                        if (value !== '') {
+                          const numValue = Number(value);
+                          if (numValue < 1) {
+                            multiplier = '1';
+                          } else if (numValue > 1.9) {
+                            multiplier = '1.9';
+                          }
+                        }
+                        setStoreConfigs(prev => ({
+                          ...prev,
+                          [selectedStore]: { ...prev[selectedStore], multiplier }
+                        }));
+                      }}
                       step="0.001"
                       min="1"
+                      max="1.9"
+                      disabled={isLocked}
+                      placeholder="Multiplier"
                     />
                   </InputWrapper>
                   <FadeWrapper show={storeConfigs[selectedStore]?.mode !== 'infinity'}>
@@ -1188,13 +1207,17 @@ function GridCalculator() {
                       <Label>End Hours</Label>
                       <Input
                         type="number"
-                        value={storeConfigs[selectedStore]?.q || DEFAULT_STORE_CONFIG.q}
-                        onChange={(e) => setStoreConfigs(prev => ({
-                          ...prev,
-                          [selectedStore]: { ...prev[selectedStore], q: e.target.value }
-                        }))}
+                        value={storeConfigs[selectedStore].q}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setStoreConfigs(prev => ({
+                            ...prev,
+                            [selectedStore]: { ...prev[selectedStore], q: value }
+                          }));
+                        }}
                         step="0.1"
                         min={Number(storeConfigs[selectedStore]?.peakHours) + 0.1 || 0.1}
+                        placeholder="End Hours"
                       />
                     </InputWrapper>
                   </FadeWrapper>
@@ -1223,45 +1246,84 @@ function GridCalculator() {
               )}
             </LeftInputs>
             <RightInputs>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                {viewMode === 'graph' && (
-                  <IconButton 
-                    onClick={() => setShowDollarAmount(!showDollarAmount)} 
-                    noHover={true}
-                    style={{ marginRight: '15px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <RiExchangeDollarLine size={24} />
-                  </IconButton>
-                )}
-                <ModeSwitches>
-                  <ModeLabel>Grid Profile</ModeLabel>
-                  <SwitchPanel>
-                    <ModeButtons>
-                      {modes.map((mode) => (
-                        <IconButton
-                          key={mode.name}
-                          onClick={() => !isLocked && setStoreConfigs(prev => ({
-                            ...prev,
-                            [selectedStore]: { ...prev[selectedStore], mode: mode.name }
-                          }))}
-                          active={storeConfigs[selectedStore]?.mode === mode.name}
-                          disabled={isLocked}
-                          title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
-                          data-mode={mode.name}
-                        >
-                          <mode.icon size={24} />
-                        </IconButton>
-                      ))}
-                    </ModeButtons>
-                  </SwitchPanel>
-                </ModeSwitches>
-              </div>
-            </RightInputs>
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      position: 'relative',
+      width: '100%',
+    }}
+  >
+    <ModeLabel>Grid Profile</ModeLabel>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+        width: '100%',
+        // Apply grid layout for larger screens, overridden by media query for mobile
+        display: 'grid',
+        gridTemplateColumns: 'auto auto',
+        gridTemplateRows: 'auto auto',
+        gap: '10px',
+      }}
+    >
+      {viewMode === 'graph' && (
+        <IconButton
+          onClick={() => setShowDollarAmount(!showDollarAmount)}
+          noHover={true}
+          style={{
+            width: '48px',
+            height: '48px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            // Position absolutely on mobile, default to grid on larger screens
+            position: 'static',
+          }}
+        >
+          <RiExchangeDollarLine size={48} />
+        </IconButton>
+      )}
+      <SwitchPanel>
+        <ModeButtons>
+          {modes.map((mode) => (
+            <IconButton
+              key={mode.name}
+              onClick={() =>
+                !isLocked &&
+                setStoreConfigs((prev) => ({
+                  ...prev,
+                  [selectedStore]: { ...prev[selectedStore], mode: mode.name },
+                }))
+              }
+              active={storeConfigs[selectedStore]?.mode === mode.name}
+              disabled={isLocked}
+              title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
+              data-mode={mode.name}
+              style={{
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <mode.icon size={24} />
+            </IconButton>
+          ))}
+        </ModeButtons>
+      </SwitchPanel>
+    </div>
+  </div>
+</RightInputs>
           </InputsContainer>
           {viewMode === 'graph' ? (
             <Graph
               data={graphData}
-              baseRate={storeConfigs[selectedStore]?.baseRate || DEFAULT_STORE_CONFIG.baseRate}
+              baseRate={storeConfigs[selectedStore]?.baseRate || '150'} // Default to 150 for Graph
               showDollarAmount={showDollarAmount}
               theme={theme}
               onCopyValue={onCopyValue}
