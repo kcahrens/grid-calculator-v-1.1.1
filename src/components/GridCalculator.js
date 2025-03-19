@@ -1248,75 +1248,75 @@ function GridCalculator() {
             <RightInputs>
   <div
     style={{
-      display: 'flex',
-      flexDirection: 'column',
+      display: 'grid',
+      gridTemplateColumns: 'auto auto',
+      gridTemplateRows: 'auto auto',
+      gap: '10px',
       alignItems: 'center',
       position: 'relative',
       width: '100%',
     }}
   >
-    <ModeLabel>Grid Profile</ModeLabel>
-    <div
+    <ModeLabel
       style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        position: 'relative',
-        width: '100%',
-        // Apply grid layout for larger screens, overridden by media query for mobile
-        display: 'grid',
-        gridTemplateColumns: 'auto auto',
-        gridTemplateRows: 'auto auto',
-        gap: '10px',
+        gridRow: 1,
+        gridColumn: 2,
+        justifySelf: 'center',
       }}
     >
-      {viewMode === 'graph' && (
-        <IconButton
-          onClick={() => setShowDollarAmount(!showDollarAmount)}
-          noHover={true}
-          style={{
-            width: '48px',
-            height: '48px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            // Position absolutely on mobile, default to grid on larger screens
-            position: 'static',
-          }}
-        >
-          <RiExchangeDollarLine size={48} />
-        </IconButton>
-      )}
-      <SwitchPanel>
-        <ModeButtons>
-          {modes.map((mode) => (
-            <IconButton
-              key={mode.name}
-              onClick={() =>
-                !isLocked &&
-                setStoreConfigs((prev) => ({
-                  ...prev,
-                  [selectedStore]: { ...prev[selectedStore], mode: mode.name },
-                }))
-              }
-              active={storeConfigs[selectedStore]?.mode === mode.name}
-              disabled={isLocked}
-              title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
-              data-mode={mode.name}
-              style={{
-                width: '40px',
-                height: '40px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <mode.icon size={24} />
-            </IconButton>
-          ))}
-        </ModeButtons>
-      </SwitchPanel>
-    </div>
+      Grid Profile
+    </ModeLabel>
+    {viewMode === 'graph' && (
+      <IconButton
+        onClick={() => setShowDollarAmount(!showDollarAmount)}
+        noHover={true}
+        style={{
+          gridRow: 2,
+          gridColumn: 1,
+          width: '48px',
+          height: '48px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <RiExchangeDollarLine size={48} />
+      </IconButton>
+    )}
+    <SwitchPanel
+      style={{
+        gridRow: 2,
+        gridColumn: 2,
+      }}
+    >
+      <ModeButtons>
+        {modes.map((mode) => (
+          <IconButton
+            key={mode.name}
+            onClick={() =>
+              !isLocked &&
+              setStoreConfigs((prev) => ({
+                ...prev,
+                [selectedStore]: { ...prev[selectedStore], mode: mode.name },
+              }))
+            }
+            active={storeConfigs[selectedStore]?.mode === mode.name}
+            disabled={isLocked}
+            title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
+            data-mode={mode.name}
+            style={{
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <mode.icon size={24} />
+          </IconButton>
+        ))}
+      </ModeButtons>
+    </SwitchPanel>
   </div>
 </RightInputs>
           </InputsContainer>
