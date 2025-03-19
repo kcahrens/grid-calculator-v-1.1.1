@@ -7,7 +7,7 @@ import Graph from './Graph';
 // Global default configuration for stores
 const DEFAULT_STORE_CONFIG = {
   baseRate: '150',
-  multiplier: '1.002',
+  multiplier: '2', // Represents % increase per hour
   peakHours: '5',
   mode: 'infinity',
   q: '20',
@@ -323,6 +323,14 @@ const InputWrapper = styled.div`
   min-width: 120px;
 `;
 
+const PercentageInputWrapper = styled.div`
+  position: relative;
+  width: 100px;
+  @media (max-width: 600px) {
+    width: 150px;
+  }
+`;
+
 const Label = styled.label`
   font-size: 14px;
   font-weight: 600;
@@ -338,6 +346,8 @@ const Input = styled.input`
   border-radius: 10px;
   width: 100px;
   font-size: 16px;
+  text-align: center; /* Center the text */
+  box-sizing: border-box;
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.accent};
@@ -350,6 +360,20 @@ const Input = styled.input`
     color: ${({ theme }) => theme.disabledText};
     cursor: not-allowed;
   }
+`;
+
+const PercentageInput = styled(Input)`
+  padding-right: 24px; /* Make room for the % sign */
+`;
+
+const PercentageSymbol = styled.span`
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: ${({ theme }) => theme.text};
+  font-size: 16px;
+  pointer-events: none;
 `;
 
 const TableContainer = styled.div`
@@ -934,7 +958,9 @@ function GridCalculator() {
   const calculateValue = (totalHours, config = DEFAULT_STORE_CONFIG) => {
     const { baseRate, multiplier, mode, peakHours, q } = config;
     const numBaseRate = Number(baseRate) || 150; // Default to 150 if empty
-    const numMultiplier = Number(multiplier) || 1;
+    // Convert % increase per hour to multiplier per 0.1 hour
+    const p = Number(multiplier) || 0; // Percentage increase per hour
+    const numMultiplier = 1 + (p / 1000); // Divide by 1000 because it's per 0.1 hour (0.02 / 10 = 0.002)
     const numPeakHours = peakHours ? Number(peakHours) : Infinity; // If peakHours is empty, set to Infinity
     const numQ = Number(q) || 0;
 
@@ -1153,32 +1179,27 @@ function GridCalculator() {
               {!isLocked && (
                 <>
                   <InputWrapper>
-                    <Label>Multiplier</Label>
-                    <Input
-                      type="number"
-                      value={storeConfigs[selectedStore].multiplier}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        let multiplier = value;
-                        if (value !== '') {
-                          const numValue = Number(value);
-                          if (numValue < 1) {
-                            multiplier = '1';
-                          } else if (numValue > 1.9) {
-                            multiplier = '1.9';
+                    <Label>Increase % / Hr</Label>
+                    <PercentageInputWrapper>
+                      <PercentageInput
+                        type="number"
+                        value={storeConfigs[selectedStore].multiplier}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '' || Number(value) >= 0) {
+                            setStoreConfigs(prev => ({
+                              ...prev,
+                              [selectedStore]: { ...prev[selectedStore], multiplier: value }
+                            }));
                           }
-                        }
-                        setStoreConfigs(prev => ({
-                          ...prev,
-                          [selectedStore]: { ...prev[selectedStore], multiplier }
-                        }));
-                      }}
-                      step="0.001"
-                      min="1"
-                      max="1.9"
-                      disabled={isLocked}
-                      placeholder="Multiplier"
-                    />
+                        }}
+                        step="0.1"
+                        min="0"
+                        placeholder="e.g., 2"
+                        disabled={isLocked}
+                      />
+                      <PercentageSymbol>%</PercentageSymbol>
+                    </PercentageInputWrapper>
                   </InputWrapper>
                   <FadeWrapper show={storeConfigs[selectedStore]?.mode !== 'infinity'}>
                     <InputWrapper key="peakHours">
