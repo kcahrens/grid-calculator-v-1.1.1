@@ -1,12 +1,25 @@
 // to do list:
 // we make need to make this write to a table so you can use in ASR / other VMA areas like menu???? more of a question for MR Rino
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// src/components/GridCalculator.jsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
 import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill } from 'react-icons/ri';
 import Graph from './Graph';
+
+// Global default configuration for stores
+const DEFAULT_STORE_CONFIG = {
+  baseRate: '150',
+  multiplier: '1.002',
+  peakHours: '5',
+  mode: 'infinity',
+  q: '20',
+  inputHours: ''
+};
+
+const DEFAULT_STORE_LOCK = {
+  isLocked: false,
+  lockedAt: null
+};
 
 // Themes
 const lightTheme = {
@@ -35,27 +48,15 @@ const darkTheme = {
   disabledText: '#707070'
 };
 
-// Keyframes for fade animations
+// Keyframes
 const fadeIn = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 `;
 
 const fadeOut = keyframes`
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-10px); }
 `;
 
 // Styled Components
@@ -203,7 +204,6 @@ const IconButton = styled.button`
       disabled ? 'none' : (noHover ? 'none' : (isLockButton && isLocked ? 'rgba(255, 0, 0, 0.1)' : theme.accent))};
     color: ${({ isLockButton, isLocked, noHover, theme, disabled }) => 
       disabled ? theme.disabledText : (noHover ? (isLockButton && isLocked ? '#ff0000' : theme.text) : (isLockButton && isLocked ? '#ff0000' : '#fff'))};
-  }
 `;
 
 const ExportDropdown = styled.div`
@@ -256,7 +256,7 @@ const InputsContainer = styled.div`
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 30px;
-  align-items: flex-start;
+  align-items: center;
   @media (max-width: 600px) {
     flex-direction: column;
     align-items: center;
@@ -268,6 +268,7 @@ const LeftInputs = styled.div`
   display: flex;
   flex-direction: row;
   gap: 20px;
+  align-items: center;
   @media (max-width: 600px) {
     flex-direction: column;
     align-items: center;
@@ -279,7 +280,7 @@ const RightInputs = styled.div`
   display: flex;
   flex-direction: row;
   gap: 20px;
-  align-items: flex-start;
+  align-items: center;
   @media (max-width: 600px) {
     flex-direction: column;
     align-items: center;
@@ -289,8 +290,31 @@ const RightInputs = styled.div`
 
 const ModeSwitches = styled.div`
   display: flex;
-  gap: 10px;
+  flex-direction: column;
   align-items: center;
+  gap: 2px;
+`;
+
+const ModeLabel = styled.div`
+  font-size: 14px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.text};
+  text-align: center;
+`;
+
+const ModeButtons = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const SwitchPanel = styled.div`
+  background-color: ${({ theme }) => (theme === lightTheme ? '#e6e6e6' : '#404040')};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `;
 
 const InputWrapper = styled.div`
@@ -434,15 +458,14 @@ const CopyToast = styled.div`
   pointer-events: none;
 `;
 
-// FadeWrapper Component for smooth transitions
+// FadeWrapper Component
 const FadeWrapper = ({ show, children }) => {
   const [shouldRender, setShouldRender] = useState(show);
 
   useEffect(() => {
     if (show) {
-      setShouldRender(true); // Mount immediately when show is true
+      setShouldRender(true);
     } else {
-      // Delay unmounting to allow fade-out animation
       const timer = setTimeout(() => setShouldRender(false), 300);
       return () => clearTimeout(timer);
     }
@@ -455,14 +478,163 @@ const FadeWrapper = ({ show, children }) => {
   ) : null;
 };
 
-// Store Dropdown Component
+// StoreDropdown Component
 const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef(null);
 
-  const stores = ["Store A", "Store B", "Store C"];
+  const stores = [
+    "SUBURBAN NISSAN OF FARMINGTON HILLS - L408",
+    "LITHIA RENO SUBARU - L038",
+    "LITHIA CHRYSLER JEEP DODGE RAM OF KLAMATH FALLS - L020",
+    "LITHIA HYUNDAI OF FRESNO - L029",
+    "LITHIA CHRYSLER DODGE JEEP OF RENO - L145",
+    "LITHIA HYUNDAI OF RENO - L048",
+    "LITHIA TOYOTA OF MEDFORD - L006",
+    "LITHIA NISSAN OF CLOVIS - L259",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF ROSEBURG - L063",
+    "SUBURBAN TOYOTA OF TROY - L431",
+    "HONOLULU VOLKSWAGEN - L254",
+    "LITHIA TOYOTA OF REDDING - L058",
+    "HONOLULU BUICK GMC CADILLAC - L253",
+    "MICHAELS SUBARU OF BELLEVUE - L437",
+    "ELK GROVE FORD - L547",
+    "LITHIA HYUNDAI OF ANCHORAGE - L127",
+    "LITHIA VOLKSWAGEN OF RENO - L034",
+    "HONOLULU FORD - L280",
+    "ELK GROVE SUBARU - L825",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF MEDFORD - L004",
+    "LITHIA CHEVROLET OF REDDING - L057",
+    "SUBURBAN TOYOTA OF FARMINGTON HILLS - L411",
+    "GREINER FORD LINCOLN OF CASPER - L279",
+    "LITHIA CHRYSLER DODGE JEEP RAM OF BEND - L361",
+    "CHEVROLET OF BEND - L218",
+    "CRATER LAKE FORD - L316",
+    "BEND HONDA - L219",
+    "LITHIA FORD OF KLAMATH FALLS - L227",
+    "CHEVROLET BUICK GMC OF FAIRBANKS - L143",
+    "BMW OF MONTEREY - L183",
+    "LITHIA HONDA IN MEDFORD - L009",
+    "KLAMATH FALLS TOYOTA - L019",
+    "SUBURBAN CHRYSLER DODGE JEEP RAM OF FARMINGTON HILLS - L405",
+    "SUBURBAN CHRYSLER DODGE JEEP RAM OF GARDEN CITY - L416",
+    "PRIORITY TOYOTA SPRINGFIELD - L598",
+    "BMW OF ANN ARBOR - L398",
+    "ACURA OF HONOLULU - L272",
+    "LITHIA KIA OF ANCHORAGE - L215",
+    "SUBURBAN CHRYSLER DODGE JEEP RAM FIAT OF ANN ARBOR - L400",
+    "LITHIA SUBARU OF OREGON CITY - L113",
+    "LEXUS OF SACRAMENTO - L347",
+    "LITHIA FORD LINCOLN OF FRESNO - L023",
+    "SULLIVAN CJDR YUBA - L510",
+    "CHEVROLET OF SOUTH ANCHORAGE - L148",
+    "SUBURBAN CHEVROLET / CADILLAC OF ANN ARBOR - L399",
+    "WESLEY CHAPEL HONDA - L342",
+    "KEYES LEXUS OF VAN NUYS - L368",
+    "LITHIA CHRYSLER JEEP DODGE OF GREAT FALLS - L152",
+    "LITHIA SUBARU OF FRESNO - L228",
+    "LITHIA CHRYSLER JEEP DODGE RAM OF SOUTH ANCHORAGE - L106",
+    "KEYES TOYOTA - L371",
+    "CENTENNIAL HYUNDAI - L446",
+    "MICHAELS TOYOTA OF BELLEVUE - L436",
+    "DCH KIA OF TEMECULA - L724",
+    "LITHIA HONDA (CURRY) - L492",
+    "SUBURBAN EXOTIC MOTORCARS MICHIGAN - L423",
+    "HYUNDAI OF LAS VEGAS - L444",
+    "LITHIA CHRYSLER JEEP DODGE RAM OF GRANTS PASS - L015",
+    "LITHIA NISSAN OF EUGENE - L060",
+    "AVONDALE NISSAN - L442",
+    "AUDI DOWNTOWN LA - L307",
+    "ELDER FORD OF TROY - L501",
+    "FORD OF DOWNTOWN LA - L516",
+    "ABC HYUNDAI - L447",
+    "HONDA CARS OF ROCKWALL - L352",
+    "SOUTHWEST KIA OF ROCKWALL - L452",
+    "SUBURBAN FORD OF STERLING HEIGHTS - L419",
+    "SUBURBAN MAZDA OF TROY - L428",
+    "CHEVROLET OF WASILLA - L149",
+    "SUBURBAN CADILLAC OF PLYMOUTH - L418",
+    "JAGUAR MISSION VIEJO (LAND ROVER) - L336",
+    "LITHIA NISSAN OF FRESNO - L027",
+    "DCH AUDI OXNARD - L718",
+    "AUDI CALABASAS - L756",
+    "SPORT CITY TOYOTA - L351",
+    "DCH TUSTIN ACURA - L719",
+    "SOUTHWEST KIA OF MESQUITE - L453",
+    "AUDI FARMINGTON HILLS - L403",
+    "SUBURBAN MAZDA OF FARMINGTON HILLS - L407",
+    "PORSCHE FARMINGTON HILLS - L403",
+    "SUBURBAN VOLKSWAGEN OF FARMINGTON HILLS - L403",
+    "VOLKSWAGEN OF SALEM - L241",
+    "JEEP ONLY LAS VEGAS - L519",
+    "BMW OF SHERMAN OAKS - L448",
+    "SUBURBAN HONDA - L406",
+    "SUBURBAN FORD OF WATERFORD - L434",
+    "SUBURBAN FORD OF FERNDALE - L414",
+    "SUBURBAN HYUNDAI - L425",
+    "JAGUAR LAND ROVER TROY - L427",
+    "SUBURBAN BUICK GMC OF TROY - L424",
+    "SUBURBAN SUBARU OF TROY - L430",
+    "DESERT 215 SUPERSTORE - L518",
+    "SUBURBAN CHRYSLER DODGE JEEP RAM OF TROY - L422",
+    "SUBURBAN CADILLAC OF TROY - L421",
+    "SUBURBAN VOLVO CARS - L432",
+    "MERCEDES BENZ OF ANN ARBOR - L401",
+    "LITHIA FORD LINCOLN OF ROSEBURG - L061",
+    "HONDA OF SALEM - L242",
+    "GRAPEVINE HONDA - L346",
+    "HENDERSON HYUNDAI SUPERSTORE - L541",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF SPOKANE - L275",
+    "JOHN EAGLE HONDA OF DALLAS - L349",
+    "ACURA OF SHERMAN OAKS - L449",
+    "PORSCHE DOWNTOWN LA - L308",
+    "ELDER FORD OF ROMEO - L502",
+    "GENESIS OF LAS VEGAS - L445",
+    "BUICK GMC OF BEAVERTON - L257 & L258",
+    "DCH HONDA OF OXNARD - L715",
+    "LITHIA CHRYSLER JEEP DODGE OF SANTA FE - L155",
+    "CADILLAC OF PORTLAND DATA ONLY - L257",
+    "BUICK GMC OF BEAVERTON (DATA ONLY) - L258",
+    "AUDI FORT LAUDERDALE - L503",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF EUGENE - L059",
+    "LITHIA CHRYSLER JEEP DODGE RAM OF WASILLA - L252",
+    "DCH SUBARU OF THOUSAND OAKS - L363",
+    "SAHARA CHRYSLER DODGE RAM - L517",
+    "FREEDOM CDJR OF LEXINGTON - L580",
+    "AUDI CORAL SPRINGS - L504",
+    "LITHIA BMW OF SALEM - L240",
+    "CAMP CHEVROLET - L051",
+    "BMW OF SPOKANE - L052",
+    "MERCEDES-BENZ OF PORTLAND - L223",
+    "LITHIA TOYOTA OF SPRINGFIELD - L065",
+    "LITHIA FORD OF MISSOULA - L267",
+    "LITHIA CHEVROLET BUICK GMC OF HELENA - L146",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF HELENA - L157",
+    "BMW OF ANCHORAGE - L154",
+    "SUBARU OF SPOKANE - L053",
+    "MINI OF ANCHORAGE - L235",
+    "LITHIA CHRYSLER DODGE JEEP RAM OF POCATELLO - L099",
+    "MERCEDES-BENZ OF LOS ANGELES - L304",
+    "STERLING BMW - L379",
+    "BELL ROAD TOYOTA - L378",
+    "LITHIA ELDER FORD TAMPA - L499",
+    "SUNRISE BUICK GMC AT WOLFCHASE - L815",
+    "COON RAPIDS CDJR - L803",
+    "HUDSON FORD - L801",
+    "AUDI MINNEAPOLIS - L805",
+    "AUDI ST. PAUL - L808",
+    "HYUNDAI WESLEY CHAPEL - L394",
+    "SUNRISE CHEVROLET BUICK GMC AT COLLIERVILLE - L816",
+    "ALL AMERICAN CHEVROLET OF ODESSA - L026",
+    "LITHIA CHRYSLER JEEP RAM FIAT OF BRYAN COLLEGE STATION - L173",
+    "ALL AMERICAN CHEVROLET OF MIDLAND - L011",
+    "BAIERL ACURA - L292",
+    "NEW PORT RICHEY VOLKSWAGEN - L395",
+    "HYUNDAI OF NEW PORT RICHEY - L396",
+    "MINI OF PORTLAND - L225"
+  ];
 
   const filteredStores = stores.filter(store =>
     store.toLowerCase().includes(searchTerm.toLowerCase())
@@ -543,19 +715,179 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
 
 // Main Component
 function GridCalculator() {
-  const [selectedStore, setSelectedStore] = useState("Store A");
-  const [storeConfigs, setStoreConfigs] = useState({
-    "Store A": { baseRate: '100', increasePerHour: '10', peakHours: '5', mode: 'mirror', q: '', inputHours: '' },
-    "Store B": { baseRate: '100', increasePerHour: '10', peakHours: '5', mode: 'mirror', q: '', inputHours: '' },
-    "Store C": { baseRate: '100', increasePerHour: '10', peakHours: '5', mode: 'mirror', q: '', inputHours: '' }
+  const stores = [
+    "SUBURBAN NISSAN OF FARMINGTON HILLS - L408",
+    "LITHIA RENO SUBARU - L038",
+    "LITHIA CHRYSLER JEEP DODGE RAM OF KLAMATH FALLS - L020",
+    "LITHIA HYUNDAI OF FRESNO - L029",
+    "LITHIA CHRYSLER DODGE JEEP OF RENO - L145",
+    "LITHIA HYUNDAI OF RENO - L048",
+    "LITHIA TOYOTA OF MEDFORD - L006",
+    "LITHIA NISSAN OF CLOVIS - L259",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF ROSEBURG - L063",
+    "SUBURBAN TOYOTA OF TROY - L431",
+    "HONOLULU VOLKSWAGEN - L254",
+    "LITHIA TOYOTA OF REDDING - L058",
+    "HONOLULU BUICK GMC CADILLAC - L253",
+    "MICHAELS SUBARU OF BELLEVUE - L437",
+    "ELK GROVE FORD - L547",
+    "LITHIA HYUNDAI OF ANCHORAGE - L127",
+    "LITHIA VOLKSWAGEN OF RENO - L034",
+    "HONOLULU FORD - L280",
+    "ELK GROVE SUBARU - L825",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF MEDFORD - L004",
+    "LITHIA CHEVROLET OF REDDING - L057",
+    "SUBURBAN TOYOTA OF FARMINGTON HILLS - L411",
+    "GREINER FORD LINCOLN OF CASPER - L279",
+    "LITHIA CHRYSLER DODGE JEEP RAM OF BEND - L361",
+    "CHEVROLET OF BEND - L218",
+    "CRATER LAKE FORD - L316",
+    "BEND HONDA - L219",
+    "LITHIA FORD OF KLAMATH FALLS - L227",
+    "CHEVROLET BUICK GMC OF FAIRBANKS - L143",
+    "BMW OF MONTEREY - L183",
+    "LITHIA HONDA IN MEDFORD - L009",
+    "KLAMATH FALLS TOYOTA - L019",
+    "SUBURBAN CHRYSLER DODGE JEEP RAM OF FARMINGTON HILLS - L405",
+    "SUBURBAN CHRYSLER DODGE JEEP RAM OF GARDEN CITY - L416",
+    "PRIORITY TOYOTA SPRINGFIELD - L598",
+    "BMW OF ANN ARBOR - L398",
+    "ACURA OF HONOLULU - L272",
+    "LITHIA KIA OF ANCHORAGE - L215",
+    "SUBURBAN CHRYSLER DODGE JEEP RAM FIAT OF ANN ARBOR - L400",
+    "LITHIA SUBARU OF OREGON CITY - L113",
+    "LEXUS OF SACRAMENTO - L347",
+    "LITHIA FORD LINCOLN OF FRESNO - L023",
+    "SULLIVAN CJDR YUBA - L510",
+    "CHEVROLET OF SOUTH ANCHORAGE - L148",
+    "SUBURBAN CHEVROLET / CADILLAC OF ANN ARBOR - L399",
+    "WESLEY CHAPEL HONDA - L342",
+    "KEYES LEXUS OF VAN NUYS - L368",
+    "LITHIA CHRYSLER JEEP DODGE OF GREAT FALLS - L152",
+    "LITHIA SUBARU OF FRESNO - L228",
+    "LITHIA CHRYSLER JEEP DODGE RAM OF SOUTH ANCHORAGE - L106",
+    "KEYES TOYOTA - L371",
+    "CENTENNIAL HYUNDAI - L446",
+    "MICHAELS TOYOTA OF BELLEVUE - L436",
+    "DCH KIA OF TEMECULA - L724",
+    "LITHIA HONDA (CURRY) - L492",
+    "SUBURBAN EXOTIC MOTORCARS MICHIGAN - L423",
+    "HYUNDAI OF LAS VEGAS - L444",
+    "LITHIA CHRYSLER JEEP DODGE RAM OF GRANTS PASS - L015",
+    "LITHIA NISSAN OF EUGENE - L060",
+    "AVONDALE NISSAN - L442",
+    "AUDI DOWNTOWN LA - L307",
+    "ELDER FORD OF TROY - L501",
+    "FORD OF DOWNTOWN LA - L516",
+    "ABC HYUNDAI - L447",
+    "HONDA CARS OF ROCKWALL - L352",
+    "SOUTHWEST KIA OF ROCKWALL - L452",
+    "SUBURBAN FORD OF STERLING HEIGHTS - L419",
+    "SUBURBAN MAZDA OF TROY - L428",
+    "CHEVROLET OF WASILLA - L149",
+    "SUBURBAN CADILLAC OF PLYMOUTH - L418",
+    "JAGUAR MISSION VIEJO (LAND ROVER) - L336",
+    "LITHIA NISSAN OF FRESNO - L027",
+    "DCH AUDI OXNARD - L718",
+    "AUDI CALABASAS - L756",
+    "SPORT CITY TOYOTA - L351",
+    "DCH TUSTIN ACURA - L719",
+    "SOUTHWEST KIA OF MESQUITE - L453",
+    "AUDI FARMINGTON HILLS - L403",
+    "SUBURBAN MAZDA OF FARMINGTON HILLS - L407",
+    "PORSCHE FARMINGTON HILLS - L403",
+    "SUBURBAN VOLKSWAGEN OF FARMINGTON HILLS - L403",
+    "VOLKSWAGEN OF SALEM - L241",
+    "JEEP ONLY LAS VEGAS - L519",
+    "BMW OF SHERMAN OAKS - L448",
+    "SUBURBAN HONDA - L406",
+    "SUBURBAN FORD OF WATERFORD - L434",
+    "SUBURBAN FORD OF FERNDALE - L414",
+    "SUBURBAN HYUNDAI - L425",
+    "JAGUAR LAND ROVER TROY - L427",
+    "SUBURBAN BUICK GMC OF TROY - L424",
+    "SUBURBAN SUBARU OF TROY - L430",
+    "DESERT 215 SUPERSTORE - L518",
+    "SUBURBAN CHRYSLER DODGE JEEP RAM OF TROY - L422",
+    "SUBURBAN CADILLAC OF TROY - L421",
+    "SUBURBAN VOLVO CARS - L432",
+    "MERCEDES BENZ OF ANN ARBOR - L401",
+    "LITHIA FORD LINCOLN OF ROSEBURG - L061",
+    "HONDA OF SALEM - L242",
+    "GRAPEVINE HONDA - L346",
+    "HENDERSON HYUNDAI SUPERSTORE - L541",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF SPOKANE - L275",
+    "JOHN EAGLE HONDA OF DALLAS - L349",
+    "ACURA OF SHERMAN OAKS - L449",
+    "PORSCHE DOWNTOWN LA - L308",
+    "ELDER FORD OF ROMEO - L502",
+    "GENESIS OF LAS VEGAS - L445",
+    "BUICK GMC OF BEAVERTON - L257 & L258",
+    "DCH HONDA OF OXNARD - L715",
+    "LITHIA CHRYSLER JEEP DODGE OF SANTA FE - L155",
+    "CADILLAC OF PORTLAND DATA ONLY - L257",
+    "BUICK GMC OF BEAVERTON (DATA ONLY) - L258",
+    "AUDI FORT LAUDERDALE - L503",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF EUGENE - L059",
+    "LITHIA CHRYSLER JEEP DODGE RAM OF WASILLA - L252",
+    "DCH SUBARU OF THOUSAND OAKS - L363",
+    "SAHARA CHRYSLER DODGE RAM - L517",
+    "FREEDOM CDJR OF LEXINGTON - L580",
+    "AUDI CORAL SPRINGS - L504",
+    "LITHIA BMW OF SALEM - L240",
+    "CAMP CHEVROLET - L051",
+    "BMW OF SPOKANE - L052",
+    "MERCEDES-BENZ OF PORTLAND - L223",
+    "LITHIA TOYOTA OF SPRINGFIELD - L065",
+    "LITHIA FORD OF MISSOULA - L267",
+    "LITHIA CHEVROLET BUICK GMC OF HELENA - L146",
+    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF HELENA - L157",
+    "BMW OF ANCHORAGE - L154",
+    "SUBARU OF SPOKANE - L053",
+    "MINI OF ANCHORAGE - L235",
+    "LITHIA CHRYSLER DODGE JEEP RAM OF POCATELLO - L099",
+    "MERCEDES-BENZ OF LOS ANGELES - L304",
+    "STERLING BMW - L379",
+    "BELL ROAD TOYOTA - L378",
+    "LITHIA ELDER FORD TAMPA - L499",
+    "SUNRISE BUICK GMC AT WOLFCHASE - L815",
+    "COON RAPIDS CDJR - L803",
+    "HUDSON FORD - L801",
+    "AUDI MINNEAPOLIS - L805",
+    "AUDI ST. PAUL - L808",
+    "HYUNDAI WESLEY CHAPEL - L394",
+    "SUNRISE CHEVROLET BUICK GMC AT COLLIERVILLE - L816",
+    "ALL AMERICAN CHEVROLET OF ODESSA - L026",
+    "LITHIA CHRYSLER JEEP RAM FIAT OF BRYAN COLLEGE STATION - L173",
+    "ALL AMERICAN CHEVROLET OF MIDLAND - L011",
+    "BAIERL ACURA - L292",
+    "NEW PORT RICHEY VOLKSWAGEN - L395",
+    "HYUNDAI OF NEW PORT RICHEY - L396",
+    "MINI OF PORTLAND - L225"
+  ];
+
+  const [selectedStore, setSelectedStore] = useState("SUBURBAN NISSAN OF FARMINGTON HILLS - L408");
+
+  // Initialize storeConfigs with defaults for all stores
+  const [storeConfigs, setStoreConfigs] = useState(() => {
+    const configs = {};
+    stores.forEach(store => {
+      configs[store] = { ...DEFAULT_STORE_CONFIG };
+    });
+    return configs;
   });
-  const [storeLocks, setStoreLocks] = useState({
-    "Store A": { isLocked: false, lockedAt: null },
-    "Store B": { isLocked: false, lockedAt: null },
-    "Store C": { isLocked: false, lockedAt: null }
+
+  // Initialize storeLocks with defaults for all stores
+  const [storeLocks, setStoreLocks] = useState(() => {
+    const locks = {};
+    stores.forEach(store => {
+      locks[store] = { ...DEFAULT_STORE_LOCK };
+    });
+    return locks;
   });
+
   const [theme, setTheme] = useState('light');
-  const [viewMode, setViewMode] = useState('grid'); /// this set's home page
+  const [viewMode, setViewMode] = useState('grid');
   const [showDollarAmount, setShowDollarAmount] = useState(false);
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: '' });
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -564,11 +896,13 @@ function GridCalculator() {
   const lockButtonRef = useRef(null);
   let longPressTimer;
 
+  // Theme detection
   useEffect(() => {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setTheme(prefersDark ? 'dark' : 'light');
   }, []);
 
+  // Click outside handler for export menu
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -599,52 +933,61 @@ function GridCalculator() {
   const hourRates = Array.from({ length: 21 }, (_, i) => i);
   const increments = Array.from({ length: 10 }, (_, i) => i * 0.1);
 
-  const calculateValue = (totalHours, config) => {
-    const { baseRate, increasePerHour, mode, peakHours, q } = config;
+  const calculateValue = (totalHours, config = DEFAULT_STORE_CONFIG) => {
+    const { baseRate, multiplier, mode, peakHours, q } = config;
     const numBaseRate = Number(baseRate) || 0;
-    const numIncreasePerHour = Number(increasePerHour) || 0;
-    const numPeakHours = Number(peakHours) || 0;
+    const numMultiplier = Number(multiplier) || 1;
+    const numPeakHours = peakHours ? Number(peakHours) : Infinity; // If peakHours is empty, set to Infinity
     const numQ = Number(q) || 0;
 
     if (totalHours <= 0) return 0;
 
-    let elr;
-    if (mode === 'infinity') {
-      elr = numBaseRate + (totalHours - 1) * numIncreasePerHour;
+    // Convert hours to number of 0.1-hour units
+    const k = Math.round(totalHours * 10);
+    let cellsPastOne = Math.max(0, k - 10); // cells past 1.0 hour
+
+    let scalingFactor = 1;
+
+    if (mode === 'infinity' || (mode === 'hoursCap' && !peakHours)) {
+      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+    } else if (mode === 'hoursCap' && peakHours) {
+      const peakCells = Math.round(numPeakHours * 10) - 10;
+      cellsPastOne = Math.min(cellsPastOne, peakCells);
+      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
     } else if (mode === 'mirror') {
+      const peakCells = Math.round(numPeakHours * 10) - 10;
       if (totalHours <= numPeakHours) {
-        elr = numBaseRate + (totalHours - 1) * numIncreasePerHour;
+        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
       } else {
-        const mirroredHour = 2 * numPeakHours - totalHours;
-        elr = numBaseRate + Math.max(0, (mirroredHour - 1)) * numIncreasePerHour;
+        const cellsPastPeak = k - Math.round(numPeakHours * 10);
+        const mirroredCells = peakCells - cellsPastPeak;
+        cellsPastOne = Math.max(0, mirroredCells);
+        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
       }
     } else if (mode === 'proportional') {
       if (totalHours <= numPeakHours) {
-        elr = numBaseRate + (totalHours - 1) * numIncreasePerHour;
+        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+      } else if (totalHours <= numQ && numQ > numPeakHours) {
+        const peakCells = Math.round(numPeakHours * 10) - 10;
+        const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
+        const decreaseFactor = (totalHours - numPeakHours) / (numQ - numPeakHours);
+        scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
       } else {
-        const maxIncrease = (numPeakHours - 1) * numIncreasePerHour;
-        if (numQ > numPeakHours) {
-          const decreasePerHour = maxIncrease / (numQ - numPeakHours);
-          const decrease = (totalHours - numPeakHours) * decreasePerHour;
-          elr = numBaseRate + maxIncrease - decrease;
-          if (elr < numBaseRate) elr = numBaseRate;
-        } else {
-          elr = numBaseRate + maxIncrease;
-        }
+        scalingFactor = 1;
       }
-    } else if (mode === 'hoursCap') {
-      if (totalHours <= numPeakHours) {
-        elr = numBaseRate + (totalHours - 1) * numIncreasePerHour;
-      } else {
-        elr = numBaseRate + (numPeakHours - 1) * numIncreasePerHour;
-      }
-    } else {
-      elr = numBaseRate;
     }
 
-    elr = Math.max(elr, numBaseRate);
-    const totalAmount = elr * totalHours;
-    return totalAmount;
+    let totalAmount = numBaseRate * scalingFactor * totalHours;
+
+    // For hoursCap mode with peakHours, linear increase beyond peakHours
+    if (mode === 'hoursCap' && peakHours && totalHours > numPeakHours) {
+      const peakCells = Math.round(numPeakHours * 10) - 10;
+      const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
+      const peakAmount = numBaseRate * peakScalingFactor * numPeakHours;
+      totalAmount = peakAmount + (totalHours - numPeakHours) * numBaseRate * peakScalingFactor;
+    }
+
+    return Number(totalAmount.toFixed(2));
   };
 
   const generateGraphData = (config) => {
@@ -702,7 +1045,7 @@ function GridCalculator() {
     setTooltip({ show: false, x: 0, y: 0, content: '' });
   };
 
-  const numInputHours = Number(storeConfigs[selectedStore].inputHours);
+  const numInputHours = Number(storeConfigs[selectedStore]?.inputHours || '');
   let totalAmount = 0;
   if (!isNaN(numInputHours) && numInputHours >= 0) {
     totalAmount = calculateValue(numInputHours, storeConfigs[selectedStore]);
@@ -741,7 +1084,7 @@ function GridCalculator() {
     { name: 'proportional', icon: RiCrosshair2Fill }
   ];
 
-  const isLocked = storeLocks[selectedStore].isLocked;
+  const isLocked = storeLocks[selectedStore]?.isLocked || false;
 
   return (
     <ThemeProvider theme={theme === 'light' ? lightTheme : darkTheme}>
@@ -750,11 +1093,6 @@ function GridCalculator() {
           <Title>Labor Rate Matrix</Title>
           <StoreDropdown selectedStore={selectedStore} setSelectedStore={setSelectedStore} storeLocks={storeLocks} />
           <ButtonGroup>
-            {viewMode === 'graph' && (
-              <IconButton onClick={() => setShowDollarAmount(!showDollarAmount)} noHover={true}>
-                <RiExchangeDollarLine size={24} />
-              </IconButton>
-            )}
             <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
               <RiLineChartLine size={24} />
             </IconButton>
@@ -771,7 +1109,7 @@ function GridCalculator() {
               onTouchEnd={handleTouchEnd}
               isLockButton={true}
               isLocked={isLocked}
-              title={isLocked ? `Locked at: ${formatDate(storeLocks[selectedStore].lockedAt)}` : ''}
+              title={isLocked ? `Locked at: ${formatDate(storeLocks[selectedStore]?.lockedAt)}` : ''}
             >
               {isLocked ? <RiLockLine size={24} /> : <RiLockUnlockLine size={24} />}
             </IconButton>
@@ -800,7 +1138,7 @@ function GridCalculator() {
                 <Label>Base Rate</Label>
                 <Input
                   type="number"
-                  value={storeConfigs[selectedStore].baseRate}
+                  value={storeConfigs[selectedStore]?.baseRate || DEFAULT_STORE_CONFIG.baseRate}
                   onChange={(e) => setStoreConfigs(prev => ({
                     ...prev,
                     [selectedStore]: { ...prev[selectedStore], baseRate: e.target.value }
@@ -811,43 +1149,52 @@ function GridCalculator() {
               {!isLocked && (
                 <>
                   <InputWrapper>
-                    <Label>Increase / Hour</Label>
+                    <Label>Multiplier</Label>
                     <Input
                       type="number"
-                      value={storeConfigs[selectedStore].increasePerHour}
+                      value={storeConfigs[selectedStore]?.multiplier || DEFAULT_STORE_CONFIG.multiplier}
                       onChange={(e) => setStoreConfigs(prev => ({
                         ...prev,
-                        [selectedStore]: { ...prev[selectedStore], increasePerHour: e.target.value }
+                        [selectedStore]: { ...prev[selectedStore], multiplier: e.target.value }
                       }))}
+                      step="0.001"
+                      min="1"
                     />
                   </InputWrapper>
-                  <FadeWrapper show={storeConfigs[selectedStore].mode !== 'infinity'}>
+                  <FadeWrapper show={storeConfigs[selectedStore]?.mode !== 'infinity'}>
                     <InputWrapper key="peakHours">
                       <Label>Peak Hours</Label>
                       <Input
                         type="number"
-                        value={storeConfigs[selectedStore].peakHours}
-                        onChange={(e) => setStoreConfigs(prev => ({
-                          ...prev,
-                          [selectedStore]: { ...prev[selectedStore], peakHours: e.target.value }
-                        }))}
+                        value={storeConfigs[selectedStore]?.peakHours ?? ''} // Use ?? to allow empty string
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Allow empty string or valid number >= 0
+                          if (value === '' || (Number(value) >= 0 && !isNaN(Number(value)))) {
+                            setStoreConfigs(prev => ({
+                              ...prev,
+                              [selectedStore]: { ...prev[selectedStore], peakHours: value }
+                            }));
+                          }
+                        }}
                         step="0.1"
-                        min="0"
+                        min="1"
+                        placeholder="Hour Limit"
                       />
                     </InputWrapper>
                   </FadeWrapper>
-                  <FadeWrapper show={storeConfigs[selectedStore].mode === 'proportional'}>
+                  <FadeWrapper show={storeConfigs[selectedStore]?.mode === 'proportional'}>
                     <InputWrapper key="decreaseToHour">
                       <Label>End Hours</Label>
                       <Input
                         type="number"
-                        value={storeConfigs[selectedStore].q}
+                        value={storeConfigs[selectedStore]?.q || DEFAULT_STORE_CONFIG.q}
                         onChange={(e) => setStoreConfigs(prev => ({
                           ...prev,
                           [selectedStore]: { ...prev[selectedStore], q: e.target.value }
                         }))}
                         step="0.1"
-                        min={Number(storeConfigs[selectedStore].peakHours) + 0.1 || 0.1}
+                        min={Number(storeConfigs[selectedStore]?.peakHours) + 0.1 || 0.1}
                       />
                     </InputWrapper>
                   </FadeWrapper>
@@ -858,7 +1205,7 @@ function GridCalculator() {
                   <Label>Enter Hours</Label>
                   <Input
                     type="number"
-                    value={storeConfigs[selectedStore].inputHours}
+                    value={storeConfigs[selectedStore]?.inputHours || DEFAULT_STORE_CONFIG.inputHours}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (value === '' || Number(value) >= 0) {
@@ -876,35 +1223,52 @@ function GridCalculator() {
               )}
             </LeftInputs>
             <RightInputs>
-              <ModeSwitches>
-                {modes.map((mode) => (
-                  <IconButton
-                    key={mode.name}
-                    onClick={() => !isLocked && setStoreConfigs(prev => ({
-                      ...prev,
-                      [selectedStore]: { ...prev[selectedStore], mode: mode.name }
-                    }))}
-                    active={storeConfigs[selectedStore].mode === mode.name}
-                    disabled={isLocked}
-                    title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                {viewMode === 'graph' && (
+                  <IconButton 
+                    onClick={() => setShowDollarAmount(!showDollarAmount)} 
+                    noHover={true}
+                    style={{ marginRight: '15px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
-                    <mode.icon size={24} />
+                    <RiExchangeDollarLine size={24} />
                   </IconButton>
-                ))}
-              </ModeSwitches>
+                )}
+                <ModeSwitches>
+                  <ModeLabel>Grid Profile</ModeLabel>
+                  <SwitchPanel>
+                    <ModeButtons>
+                      {modes.map((mode) => (
+                        <IconButton
+                          key={mode.name}
+                          onClick={() => !isLocked && setStoreConfigs(prev => ({
+                            ...prev,
+                            [selectedStore]: { ...prev[selectedStore], mode: mode.name }
+                          }))}
+                          active={storeConfigs[selectedStore]?.mode === mode.name}
+                          disabled={isLocked}
+                          title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
+                          data-mode={mode.name}
+                        >
+                          <mode.icon size={24} />
+                        </IconButton>
+                      ))}
+                    </ModeButtons>
+                  </SwitchPanel>
+                </ModeSwitches>
+              </div>
             </RightInputs>
           </InputsContainer>
           {viewMode === 'graph' ? (
             <Graph
               data={graphData}
-              baseRate={storeConfigs[selectedStore].baseRate}
+              baseRate={storeConfigs[selectedStore]?.baseRate || DEFAULT_STORE_CONFIG.baseRate}
               showDollarAmount={showDollarAmount}
               theme={theme}
               onCopyValue={onCopyValue}
             />
           ) : viewMode === 'calculator' ? (
             <CalculatorContainer>
-              {storeConfigs[selectedStore].inputHours && !isNaN(numInputHours) && numInputHours >= 0 && (
+              {storeConfigs[selectedStore]?.inputHours && !isNaN(numInputHours) && numInputHours >= 0 && (
                 <ResultContainer>
                   <ResultText>Total Amount: ${totalAmount.toFixed(2)}</ResultText>
                   <CopyButton onClick={handleCopyTotalAmount} title="Copy Total Amount">
@@ -929,7 +1293,8 @@ function GridCalculator() {
                     <tr key={hourRate}>
                       <Td isFirstColumn>{hourRate.toFixed(1)}</Td>
                       {increments.map((inc) => {
-                        const value = calculateValue(hourRate + inc, storeConfigs[selectedStore]).toFixed(2);
+                        const totalHours = hourRate + inc;
+                        const value = calculateValue(totalHours, storeConfigs[selectedStore]).toFixed(2);
                         return (
                           <Td
                             key={inc}
