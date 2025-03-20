@@ -1,7 +1,6 @@
-// GridCalculator.js
 import { useState, useEffect, useMemo, useRef } from 'react';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill } from 'react-icons/ri';
 import Graph from './Graph';
 
 // Global default configuration for stores
@@ -11,7 +10,9 @@ const DEFAULT_STORE_CONFIG = {
   peakHours: '5',
   mode: 'infinity',
   q: '20',
-  inputHours: ''
+  inputHours: '',
+  capType: 'hours', // New: 'hours' or 'elr'
+  maxELR: '200'     // New: Maximum Effective Labor Rate when capType is 'elr'
 };
 
 const DEFAULT_STORE_LOCK = {
@@ -197,11 +198,26 @@ const IconButton = styled.button`
     disabled ? theme.disabledText : (isLockButton && isLocked ? '#ff0000' : (active ? '#fff' : theme.text))};
   border-radius: 8px;
   opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
+  width: 40px;
+  height: 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   &:hover {
     background: ${({ theme, isLockButton, isLocked, noHover, disabled }) => 
       disabled ? 'none' : (noHover ? 'none' : (isLockButton && isLocked ? 'rgba(255, 0, 0, 0.1)' : theme.accent))};
     color: ${({ isLockButton, isLocked, noHover, theme, disabled }) => 
       disabled ? theme.disabledText : (noHover ? (isLockButton && isLocked ? '#ff0000' : theme.text) : (isLockButton && isLocked ? '#ff0000' : '#fff'))};
+  }
+`;
+
+// Styled component for the graph mode switch button with manual positioning
+const GraphSwitchButton = styled(IconButton)`
+  position: relative;
+  top: 28px; /* Adjust this value to align with the icons */
+  background: none; /* Ensure no backdrop */
+  border: none; /* Ensure no border */
 `;
 
 const ExportDropdown = styled.div`
@@ -346,7 +362,7 @@ const Input = styled.input`
   border-radius: 10px;
   width: 100px;
   font-size: 16px;
-  text-align: center; /* Center the text */
+  text-align: center;
   box-sizing: border-box;
   &:focus {
     outline: none;
@@ -363,7 +379,7 @@ const Input = styled.input`
 `;
 
 const PercentageInput = styled(Input)`
-  padding-right: 24px; /* Make room for the % sign */
+  padding-right: 24px;
 `;
 
 const PercentageSymbol = styled.span`
@@ -956,49 +972,65 @@ function GridCalculator() {
   const increments = Array.from({ length: 10 }, (_, i) => i * 0.1);
 
   const calculateValue = (totalHours, config = DEFAULT_STORE_CONFIG) => {
-    const { baseRate, multiplier, mode, peakHours, q } = config;
-    const numBaseRate = Number(baseRate) || 150; // Default to 150 if empty
-    // Convert % increase per hour to multiplier per 0.1 hour
-    const p = Number(multiplier) || 0; // Percentage increase per hour
-    const numMultiplier = 1 + (p / 1000); // Divide by 1000 because it's per 0.1 hour (0.02 / 10 = 0.002)
-    const numPeakHours = peakHours ? Number(peakHours) : Infinity; // If peakHours is empty, set to Infinity
+    const { baseRate, multiplier, mode, peakHours, q, capType, maxELR } = config;
+    const numBaseRate = Number(baseRate) || 150;
+    const p = Number(multiplier) || 0;
+    const numMultiplier = 1 + (p / 1000); // per 0.1 hour
+    let effectivePeakHours;
+
+    // Determine effectivePeakHours based on capType
+    if (mode === 'infinity') {
+      effectivePeakHours = Infinity;
+    } else if (capType === 'hours') {
+      effectivePeakHours = Number(peakHours) || Infinity;
+    } else if (capType === 'elr') {
+      const numMaxELR = Number(maxELR) || Infinity;
+      if (p > 0) {
+        const a = p / 100; // scalingFactor = 1 + (p / 100) * (totalHours - 1)
+        const targetScalingFactor = numMaxELR / numBaseRate;
+        effectivePeakHours = targetScalingFactor > 1 ? 1 + (targetScalingFactor - 1) / a : 1.0;
+      } else {
+        effectivePeakHours = Infinity;
+      }
+    } else {
+      effectivePeakHours = Infinity;
+    }
+
     const numQ = Number(q) || 0;
 
     if (totalHours <= 0) return 0;
 
-    // Convert hours to number of 0.1-hour units
     const k = Math.round(totalHours * 10);
-    let cellsPastOne = Math.max(0, k - 10); // cells past 1.0 hour
-
+    let cellsPastOne = Math.max(0, k - 10);
     let scalingFactor = 1;
 
-    if (mode === 'infinity' || (mode === 'hoursCap' && !peakHours)) {
+    if (mode === 'infinity') {
       scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-    } else if (mode === 'hoursCap' && peakHours) {
-      const peakCells = Math.round(numPeakHours * 10) - 10;
+    } else if (mode === 'hoursCap') {
+      const peakCells = Math.round(effectivePeakHours * 10) - 10;
       cellsPastOne = Math.min(cellsPastOne, peakCells);
       scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
     } else if (mode === 'mirror') {
-      const peakCells = Math.round(numPeakHours * 10) - 10;
-      if (totalHours <= numPeakHours) {
+      const peakCells = Math.round(effectivePeakHours * 10) - 10;
+      if (totalHours <= effectivePeakHours) {
         scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
       } else {
-        const cellsPastPeak = k - Math.round(numPeakHours * 10);
+        const cellsPastPeak = k - Math.round(effectivePeakHours * 10);
         const mirroredCells = peakCells - cellsPastPeak;
         cellsPastOne = Math.max(0, mirroredCells);
         scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
       }
     } else if (mode === 'proportional') {
-      const peakCells = Math.max(0, Math.round(numPeakHours * 10) - 10);
+      const peakCells = Math.max(0, Math.round(effectivePeakHours * 10) - 10);
       if (config.q === '') {
         const effectiveCellsPastOne = Math.min(cellsPastOne, peakCells);
         scalingFactor = 1 + (numMultiplier - 1) * effectiveCellsPastOne;
       } else {
         const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-        if (totalHours <= numPeakHours) {
+        if (totalHours <= effectivePeakHours) {
           scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-        } else if (totalHours <= numQ && numQ > numPeakHours) {
-          const decreaseFactor = (totalHours - numPeakHours) / (numQ - numPeakHours);
+        } else if (totalHours <= numQ && numQ > effectivePeakHours) {
+          const decreaseFactor = (totalHours - effectivePeakHours) / (numQ - effectivePeakHours);
           scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
         } else {
           scalingFactor = 1;
@@ -1008,12 +1040,11 @@ function GridCalculator() {
 
     let totalAmount = numBaseRate * scalingFactor * totalHours;
 
-    // For hoursCap mode with peakHours, linear increase beyond peakHours
-    if (mode === 'hoursCap' && peakHours && totalHours > numPeakHours) {
-      const peakCells = Math.round(numPeakHours * 10) - 10;
+    if (mode === 'hoursCap' && totalHours > effectivePeakHours) {
+      const peakCells = Math.round(effectivePeakHours * 10) - 10;
       const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-      const peakAmount = numBaseRate * peakScalingFactor * numPeakHours;
-      totalAmount = peakAmount + (totalHours - numPeakHours) * numBaseRate * peakScalingFactor;
+      const peakAmount = numBaseRate * peakScalingFactor * effectivePeakHours;
+      totalAmount = peakAmount + (totalHours - effectivePeakHours) * numBaseRate * peakScalingFactor;
     }
 
     return Number(totalAmount.toFixed(2));
@@ -1201,47 +1232,73 @@ function GridCalculator() {
                       <PercentageSymbol>%</PercentageSymbol>
                     </PercentageInputWrapper>
                   </InputWrapper>
-                  <FadeWrapper show={storeConfigs[selectedStore]?.mode !== 'infinity'}>
-                    <InputWrapper key="peakHours">
-                      <Label>Peak Hours</Label>
-                      <Input
-                        type="number"
-                        value={storeConfigs[selectedStore]?.peakHours ?? ''} // Use ?? to allow empty string
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          // Allow empty string or valid number >= 0
-                          if (value === '' || (Number(value) >= 0 && !isNaN(Number(value)))) {
+                  {storeConfigs[selectedStore].mode !== 'infinity' && storeConfigs[selectedStore].capType === 'hours' && (
+                    <FadeWrapper show={true}>
+                      <InputWrapper key="peakHours">
+                        <Label>Peak Hours</Label>
+                        <Input
+                          type="number"
+                          value={storeConfigs[selectedStore]?.peakHours ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || (Number(value) >= 0 && !isNaN(Number(value)))) {
+                              setStoreConfigs(prev => ({
+                                ...prev,
+                                [selectedStore]: { ...prev[selectedStore], peakHours: value }
+                              }));
+                            }
+                          }}
+                          step="0.1"
+                          min="1"
+                          placeholder="Hour Limit"
+                        />
+                      </InputWrapper>
+                    </FadeWrapper>
+                  )}
+                  {storeConfigs[selectedStore].mode !== 'infinity' && storeConfigs[selectedStore].capType === 'elr' && (
+                    <FadeWrapper show={true}>
+                      <InputWrapper key="maxELR">
+                        <Label>Max ELR</Label>
+                        <Input
+                          type="number"
+                          value={storeConfigs[selectedStore]?.maxELR ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || (Number(value) >= 0 && !isNaN(Number(value)))) {
+                              setStoreConfigs(prev => ({
+                                ...prev,
+                                [selectedStore]: { ...prev[selectedStore], maxELR: value }
+                              }));
+                            }
+                          }}
+                          step="0.1"
+                          min="0"
+                          placeholder="Max ELR"
+                        />
+                      </InputWrapper>
+                    </FadeWrapper>
+                  )}
+                  {storeConfigs[selectedStore].mode === 'proportional' && (
+                    <FadeWrapper show={true}>
+                      <InputWrapper key="endHours">
+                        <Label>End Hours</Label>
+                        <Input
+                          type="number"
+                          value={storeConfigs[selectedStore].q}
+                          onChange={(e) => {
+                            const value = e.target.value;
                             setStoreConfigs(prev => ({
                               ...prev,
-                              [selectedStore]: { ...prev[selectedStore], peakHours: value }
+                              [selectedStore]: { ...prev[selectedStore], q: value }
                             }));
-                          }
-                        }}
-                        step="0.1"
-                        min="1"
-                        placeholder="Hour Limit"
-                      />
-                    </InputWrapper>
-                  </FadeWrapper>
-                  <FadeWrapper show={storeConfigs[selectedStore]?.mode === 'proportional'}>
-                    <InputWrapper key="decreaseToHour">
-                      <Label>End Hours</Label>
-                      <Input
-                        type="number"
-                        value={storeConfigs[selectedStore].q}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setStoreConfigs(prev => ({
-                            ...prev,
-                            [selectedStore]: { ...prev[selectedStore], q: value }
-                          }));
-                        }}
-                        step="0.1"
-                        min={Number(storeConfigs[selectedStore]?.peakHours) + 0.1 || 0.1}
-                        placeholder="End Hours"
-                      />
-                    </InputWrapper>
-                  </FadeWrapper>
+                          }}
+                          step="0.1"
+                          min={Number(storeConfigs[selectedStore]?.peakHours) + 0.1 || 0.1}
+                          placeholder="End Hours"
+                        />
+                      </InputWrapper>
+                    </FadeWrapper>
+                  )}
                 </>
               )}
               {viewMode === 'calculator' && (
@@ -1267,84 +1324,65 @@ function GridCalculator() {
               )}
             </LeftInputs>
             <RightInputs>
-  <div
-    style={{
-      display: 'grid',
-      gridTemplateColumns: 'auto auto',
-      gridTemplateRows: 'auto auto',
-      gap: '10px',
-      alignItems: 'center',
-      position: 'relative',
-      width: '100%',
-    }}
-  >
-    <ModeLabel
-      style={{
-        gridRow: 1,
-        gridColumn: 2,
-        justifySelf: 'center',
-      }}
-    >
-      Grid Profile
-    </ModeLabel>
-    {viewMode === 'graph' && (
-      <IconButton
-        onClick={() => setShowDollarAmount(!showDollarAmount)}
-        noHover={true}
-        style={{
-          gridRow: 2,
-          gridColumn: 1,
-          width: '48px',
-          height: '48px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <RiExchangeDollarLine size={48} />
-      </IconButton>
-    )}
-    <SwitchPanel
-      style={{
-        gridRow: 2,
-        gridColumn: 2,
-      }}
-    >
-      <ModeButtons>
-        {modes.map((mode) => (
-          <IconButton
-            key={mode.name}
-            onClick={() =>
-              !isLocked &&
-              setStoreConfigs((prev) => ({
-                ...prev,
-                [selectedStore]: { ...prev[selectedStore], mode: mode.name },
-              }))
-            }
-            active={storeConfigs[selectedStore]?.mode === mode.name}
-            disabled={isLocked}
-            title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
-            data-mode={mode.name}
-            style={{
-              width: '40px',
-              height: '40px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <mode.icon size={24} />
-          </IconButton>
-        ))}
-      </ModeButtons>
-    </SwitchPanel>
-  </div>
-</RightInputs>
+              <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+                {viewMode === 'graph' && (
+                  <GraphSwitchButton
+                    onClick={() => setShowDollarAmount(!showDollarAmount)}
+                    noHover={true}
+                  >
+                    <RiExchangeDollarLine size={24} />
+                  </GraphSwitchButton>
+                )}
+                {storeConfigs[selectedStore].mode !== 'infinity' && (
+                  <ModeSwitches>
+                    <ModeLabel>Cap Type</ModeLabel>
+                    <SwitchPanel>
+                      <ModeButtons>
+                        <IconButton
+                          onClick={() => !isLocked && setStoreConfigs(prev => ({ ...prev, [selectedStore]: { ...prev[selectedStore], capType: 'hours' } }))}
+                          active={storeConfigs[selectedStore].capType === 'hours'}
+                          disabled={isLocked}
+                          title="Cap by Hours"
+                        >
+                          <RiTimeLine size={24} />
+                        </IconButton>
+                        <IconButton
+                          onClick={() => !isLocked && setStoreConfigs(prev => ({ ...prev, [selectedStore]: { ...prev[selectedStore], capType: 'elr' } }))}
+                          active={storeConfigs[selectedStore].capType === 'elr'}
+                          disabled={isLocked}
+                          title="Cap by ELR"
+                        >
+                          <RiMoneyDollarBoxFill size={24} />
+                        </IconButton>
+                      </ModeButtons>
+                    </SwitchPanel>
+                  </ModeSwitches>
+                )}
+                <ModeSwitches>
+                  <ModeLabel>Grid Profile</ModeLabel>
+                  <SwitchPanel>
+                    <ModeButtons>
+                      {modes.map((mode) => (
+                        <IconButton
+                          key={mode.name}
+                          onClick={() => !isLocked && setStoreConfigs(prev => ({ ...prev, [selectedStore]: { ...prev[selectedStore], mode: mode.name } }))}
+                          active={storeConfigs[selectedStore].mode === mode.name}
+                          disabled={isLocked}
+                          title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
+                        >
+                          <mode.icon size={24} />
+                        </IconButton>
+                      ))}
+                    </ModeButtons>
+                  </SwitchPanel>
+                </ModeSwitches>
+              </div>
+            </RightInputs>
           </InputsContainer>
           {viewMode === 'graph' ? (
             <Graph
               data={graphData}
-              baseRate={storeConfigs[selectedStore]?.baseRate || '150'} // Default to 150 for Graph
+              baseRate={storeConfigs[selectedStore]?.baseRate || '150'}
               showDollarAmount={showDollarAmount}
               theme={theme}
               onCopyValue={onCopyValue}
