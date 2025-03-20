@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop } from 'react-icons/ri';
 import Graph from './Graph';
 
 // Global default configuration for stores
@@ -212,12 +212,11 @@ const IconButton = styled.button`
   }
 `;
 
-// Styled component for the graph mode switch button with manual positioning
 const GraphSwitchButton = styled(IconButton)`
   position: relative;
-  top: 28px; /* Adjust this value to align with the icons */
-  background: none; /* Ensure no backdrop */
-  border: none; /* Ensure no border */
+  top: 28px;
+  background: none;
+  border: none;
 `;
 
 const ExportDropdown = styled.div`
@@ -523,156 +522,7 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef(null);
 
-  const stores = [
-    "SUBURBAN NISSAN OF FARMINGTON HILLS - L408",
-    "LITHIA RENO SUBARU - L038",
-    "LITHIA CHRYSLER JEEP DODGE RAM OF KLAMATH FALLS - L020",
-    "LITHIA HYUNDAI OF FRESNO - L029",
-    "LITHIA CHRYSLER DODGE JEEP OF RENO - L145",
-    "LITHIA HYUNDAI OF RENO - L048",
-    "LITHIA TOYOTA OF MEDFORD - L006",
-    "LITHIA NISSAN OF CLOVIS - L259",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF ROSEBURG - L063",
-    "SUBURBAN TOYOTA OF TROY - L431",
-    "HONOLULU VOLKSWAGEN - L254",
-    "LITHIA TOYOTA OF REDDING - L058",
-    "HONOLULU BUICK GMC CADILLAC - L253",
-    "MICHAELS SUBARU OF BELLEVUE - L437",
-    "ELK GROVE FORD - L547",
-    "LITHIA HYUNDAI OF ANCHORAGE - L127",
-    "LITHIA VOLKSWAGEN OF RENO - L034",
-    "HONOLULU FORD - L280",
-    "ELK GROVE SUBARU - L825",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF MEDFORD - L004",
-    "LITHIA CHEVROLET OF REDDING - L057",
-    "SUBURBAN TOYOTA OF FARMINGTON HILLS - L411",
-    "GREINER FORD LINCOLN OF CASPER - L279",
-    "LITHIA CHRYSLER DODGE JEEP RAM OF BEND - L361",
-    "CHEVROLET OF BEND - L218",
-    "CRATER LAKE FORD - L316",
-    "BEND HONDA - L219",
-    "LITHIA FORD OF KLAMATH FALLS - L227",
-    "CHEVROLET BUICK GMC OF FAIRBANKS - L143",
-    "BMW OF MONTEREY - L183",
-    "LITHIA HONDA IN MEDFORD - L009",
-    "KLAMATH FALLS TOYOTA - L019",
-    "SUBURBAN CHRYSLER DODGE JEEP RAM OF FARMINGTON HILLS - L405",
-    "SUBURBAN CHRYSLER DODGE JEEP RAM OF GARDEN CITY - L416",
-    "PRIORITY TOYOTA SPRINGFIELD - L598",
-    "BMW OF ANN ARBOR - L398",
-    "ACURA OF HONOLULU - L272",
-    "LITHIA KIA OF ANCHORAGE - L215",
-    "SUBURBAN CHRYSLER DODGE JEEP RAM FIAT OF ANN ARBOR - L400",
-    "LITHIA SUBARU OF OREGON CITY - L113",
-    "LEXUS OF SACRAMENTO - L347",
-    "LITHIA FORD LINCOLN OF FRESNO - L023",
-    "SULLIVAN CJDR YUBA - L510",
-    "CHEVROLET OF SOUTH ANCHORAGE - L148",
-    "SUBURBAN CHEVROLET / CADILLAC OF ANN ARBOR - L399",
-    "WESLEY CHAPEL HONDA - L342",
-    "KEYES LEXUS OF VAN NUYS - L368",
-    "LITHIA CHRYSLER JEEP DODGE OF GREAT FALLS - L152",
-    "LITHIA SUBARU OF FRESNO - L228",
-    "LITHIA CHRYSLER JEEP DODGE RAM OF SOUTH ANCHORAGE - L106",
-    "KEYES TOYOTA - L371",
-    "CENTENNIAL HYUNDAI - L446",
-    "MICHAELS TOYOTA OF BELLEVUE - L436",
-    "DCH KIA OF TEMECULA - L724",
-    "LITHIA HONDA (CURRY) - L492",
-    "SUBURBAN EXOTIC MOTORCARS MICHIGAN - L423",
-    "HYUNDAI OF LAS VEGAS - L444",
-    "LITHIA CHRYSLER JEEP DODGE RAM OF GRANTS PASS - L015",
-    "LITHIA NISSAN OF EUGENE - L060",
-    "AVONDALE NISSAN - L442",
-    "AUDI DOWNTOWN LA - L307",
-    "ELDER FORD OF TROY - L501",
-    "FORD OF DOWNTOWN LA - L516",
-    "ABC HYUNDAI - L447",
-    "HONDA CARS OF ROCKWALL - L352",
-    "SOUTHWEST KIA OF ROCKWALL - L452",
-    "SUBURBAN FORD OF STERLING HEIGHTS - L419",
-    "SUBURBAN MAZDA OF TROY - L428",
-    "CHEVROLET OF WASILLA - L149",
-    "SUBURBAN CADILLAC OF PLYMOUTH - L418",
-    "JAGUAR MISSION VIEJO (LAND ROVER) - L336",
-    "LITHIA NISSAN OF FRESNO - L027",
-    "DCH AUDI OXNARD - L718",
-    "AUDI CALABASAS - L756",
-    "SPORT CITY TOYOTA - L351",
-    "DCH TUSTIN ACURA - L719",
-    "SOUTHWEST KIA OF MESQUITE - L453",
-    "AUDI FARMINGTON HILLS - L403",
-    "SUBURBAN MAZDA OF FARMINGTON HILLS - L407",
-    "PORSCHE FARMINGTON HILLS - L403",
-    "SUBURBAN VOLKSWAGEN OF FARMINGTON HILLS - L403",
-    "VOLKSWAGEN OF SALEM - L241",
-    "JEEP ONLY LAS VEGAS - L519",
-    "BMW OF SHERMAN OAKS - L448",
-    "SUBURBAN HONDA - L406",
-    "SUBURBAN FORD OF WATERFORD - L434",
-    "SUBURBAN FORD OF FERNDALE - L414",
-    "SUBURBAN HYUNDAI - L425",
-    "JAGUAR LAND ROVER TROY - L427",
-    "SUBURBAN BUICK GMC OF TROY - L424",
-    "SUBURBAN SUBARU OF TROY - L430",
-    "DESERT 215 SUPERSTORE - L518",
-    "SUBURBAN CHRYSLER DODGE JEEP RAM OF TROY - L422",
-    "SUBURBAN CADILLAC OF TROY - L421",
-    "SUBURBAN VOLVO CARS - L432",
-    "MERCEDES BENZ OF ANN ARBOR - L401",
-    "LITHIA FORD LINCOLN OF ROSEBURG - L061",
-    "HONDA OF SALEM - L242",
-    "GRAPEVINE HONDA - L346",
-    "HENDERSON HYUNDAI SUPERSTORE - L541",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF SPOKANE - L275",
-    "JOHN EAGLE HONDA OF DALLAS - L349",
-    "ACURA OF SHERMAN OAKS - L449",
-    "PORSCHE DOWNTOWN LA - L308",
-    "ELDER FORD OF ROMEO - L502",
-    "GENESIS OF LAS VEGAS - L445",
-    "BUICK GMC OF BEAVERTON - L257 & L258",
-    "DCH HONDA OF OXNARD - L715",
-    "LITHIA CHRYSLER JEEP DODGE OF SANTA FE - L155",
-    "CADILLAC OF PORTLAND DATA ONLY - L257",
-    "BUICK GMC OF BEAVERTON (DATA ONLY) - L258",
-    "AUDI FORT LAUDERDALE - L503",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF EUGENE - L059",
-    "LITHIA CHRYSLER JEEP DODGE RAM OF WASILLA - L252",
-    "DCH SUBARU OF THOUSAND OAKS - L363",
-    "SAHARA CHRYSLER DODGE RAM - L517",
-    "FREEDOM CDJR OF LEXINGTON - L580",
-    "AUDI CORAL SPRINGS - L504",
-    "LITHIA BMW OF SALEM - L240",
-    "CAMP CHEVROLET - L051",
-    "BMW OF SPOKANE - L052",
-    "MERCEDES-BENZ OF PORTLAND - L223",
-    "LITHIA TOYOTA OF SPRINGFIELD - L065",
-    "LITHIA FORD OF MISSOULA - L267",
-    "LITHIA CHEVROLET BUICK GMC OF HELENA - L146",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF HELENA - L157",
-    "BMW OF ANCHORAGE - L154",
-    "SUBARU OF SPOKANE - L053",
-    "MINI OF ANCHORAGE - L235",
-    "LITHIA CHRYSLER DODGE JEEP RAM OF POCATELLO - L099",
-    "MERCEDES-BENZ OF LOS ANGELES - L304",
-    "STERLING BMW - L379",
-    "BELL ROAD TOYOTA - L378",
-    "LITHIA ELDER FORD TAMPA - L499",
-    "SUNRISE BUICK GMC AT WOLFCHASE - L815",
-    "COON RAPIDS CDJR - L803",
-    "HUDSON FORD - L801",
-    "AUDI MINNEAPOLIS - L805",
-    "AUDI ST. PAUL - L808",
-    "HYUNDAI WESLEY CHAPEL - L394",
-    "SUNRISE CHEVROLET BUICK GMC AT COLLIERVILLE - L816",
-    "ALL AMERICAN CHEVROLET OF ODESSA - L026",
-    "LITHIA CHRYSLER JEEP RAM FIAT OF BRYAN COLLEGE STATION - L173",
-    "ALL AMERICAN CHEVROLET OF MIDLAND - L011",
-    "BAIERL ACURA - L292",
-    "NEW PORT RICHEY VOLKSWAGEN - L395",
-    "HYUNDAI OF NEW PORT RICHEY - L396",
-    "MINI OF PORTLAND - L225"
-  ];
+  const stores = ["Store A", "Store B", "Store C"];
 
   const filteredStores = stores.filter(store =>
     store.toLowerCase().includes(searchTerm.toLowerCase())
@@ -753,160 +603,10 @@ const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
 
 // Main Component
 function GridCalculator() {
-  const stores = [
-    "SUBURBAN NISSAN OF FARMINGTON HILLS - L408",
-    "LITHIA RENO SUBARU - L038",
-    "LITHIA CHRYSLER JEEP DODGE RAM OF KLAMATH FALLS - L020",
-    "LITHIA HYUNDAI OF FRESNO - L029",
-    "LITHIA CHRYSLER DODGE JEEP OF RENO - L145",
-    "LITHIA HYUNDAI OF RENO - L048",
-    "LITHIA TOYOTA OF MEDFORD - L006",
-    "LITHIA NISSAN OF CLOVIS - L259",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF ROSEBURG - L063",
-    "SUBURBAN TOYOTA OF TROY - L431",
-    "HONOLULU VOLKSWAGEN - L254",
-    "LITHIA TOYOTA OF REDDING - L058",
-    "HONOLULU BUICK GMC CADILLAC - L253",
-    "MICHAELS SUBARU OF BELLEVUE - L437",
-    "ELK GROVE FORD - L547",
-    "LITHIA HYUNDAI OF ANCHORAGE - L127",
-    "LITHIA VOLKSWAGEN OF RENO - L034",
-    "HONOLULU FORD - L280",
-    "ELK GROVE SUBARU - L825",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF MEDFORD - L004",
-    "LITHIA CHEVROLET OF REDDING - L057",
-    "SUBURBAN TOYOTA OF FARMINGTON HILLS - L411",
-    "GREINER FORD LINCOLN OF CASPER - L279",
-    "LITHIA CHRYSLER DODGE JEEP RAM OF BEND - L361",
-    "CHEVROLET OF BEND - L218",
-    "CRATER LAKE FORD - L316",
-    "BEND HONDA - L219",
-    "LITHIA FORD OF KLAMATH FALLS - L227",
-    "CHEVROLET BUICK GMC OF FAIRBANKS - L143",
-    "BMW OF MONTEREY - L183",
-    "LITHIA HONDA IN MEDFORD - L009",
-    "KLAMATH FALLS TOYOTA - L019",
-    "SUBURBAN CHRYSLER DODGE JEEP RAM OF FARMINGTON HILLS - L405",
-    "SUBURBAN CHRYSLER DODGE JEEP RAM OF GARDEN CITY - L416",
-    "PRIORITY TOYOTA SPRINGFIELD - L598",
-    "BMW OF ANN ARBOR - L398",
-    "ACURA OF HONOLULU - L272",
-    "LITHIA KIA OF ANCHORAGE - L215",
-    "SUBURBAN CHRYSLER DODGE JEEP RAM FIAT OF ANN ARBOR - L400",
-    "LITHIA SUBARU OF OREGON CITY - L113",
-    "LEXUS OF SACRAMENTO - L347",
-    "LITHIA FORD LINCOLN OF FRESNO - L023",
-    "SULLIVAN CJDR YUBA - L510",
-    "CHEVROLET OF SOUTH ANCHORAGE - L148",
-    "SUBURBAN CHEVROLET / CADILLAC OF ANN ARBOR - L399",
-    "WESLEY CHAPEL HONDA - L342",
-    "KEYES LEXUS OF VAN NUYS - L368",
-    "LITHIA CHRYSLER JEEP DODGE OF GREAT FALLS - L152",
-    "LITHIA SUBARU OF FRESNO - L228",
-    "LITHIA CHRYSLER JEEP DODGE RAM OF SOUTH ANCHORAGE - L106",
-    "KEYES TOYOTA - L371",
-    "CENTENNIAL HYUNDAI - L446",
-    "MICHAELS TOYOTA OF BELLEVUE - L436",
-    "DCH KIA OF TEMECULA - L724",
-    "LITHIA HONDA (CURRY) - L492",
-    "SUBURBAN EXOTIC MOTORCARS MICHIGAN - L423",
-    "HYUNDAI OF LAS VEGAS - L444",
-    "LITHIA CHRYSLER JEEP DODGE RAM OF GRANTS PASS - L015",
-    "LITHIA NISSAN OF EUGENE - L060",
-    "AVONDALE NISSAN - L442",
-    "AUDI DOWNTOWN LA - L307",
-    "ELDER FORD OF TROY - L501",
-    "FORD OF DOWNTOWN LA - L516",
-    "ABC HYUNDAI - L447",
-    "HONDA CARS OF ROCKWALL - L352",
-    "SOUTHWEST KIA OF ROCKWALL - L452",
-    "SUBURBAN FORD OF STERLING HEIGHTS - L419",
-    "SUBURBAN MAZDA OF TROY - L428",
-    "CHEVROLET OF WASILLA - L149",
-    "SUBURBAN CADILLAC OF PLYMOUTH - L418",
-    "JAGUAR MISSION VIEJO (LAND ROVER) - L336",
-    "LITHIA NISSAN OF FRESNO - L027",
-    "DCH AUDI OXNARD - L718",
-    "AUDI CALABASAS - L756",
-    "SPORT CITY TOYOTA - L351",
-    "DCH TUSTIN ACURA - L719",
-    "SOUTHWEST KIA OF MESQUITE - L453",
-    "AUDI FARMINGTON HILLS - L403",
-    "SUBURBAN MAZDA OF FARMINGTON HILLS - L407",
-    "PORSCHE FARMINGTON HILLS - L403",
-    "SUBURBAN VOLKSWAGEN OF FARMINGTON HILLS - L403",
-    "VOLKSWAGEN OF SALEM - L241",
-    "JEEP ONLY LAS VEGAS - L519",
-    "BMW OF SHERMAN OAKS - L448",
-    "SUBURBAN HONDA - L406",
-    "SUBURBAN FORD OF WATERFORD - L434",
-    "SUBURBAN FORD OF FERNDALE - L414",
-    "SUBURBAN HYUNDAI - L425",
-    "JAGUAR LAND ROVER TROY - L427",
-    "SUBURBAN BUICK GMC OF TROY - L424",
-    "SUBURBAN SUBARU OF TROY - L430",
-    "DESERT 215 SUPERSTORE - L518",
-    "SUBURBAN CHRYSLER DODGE JEEP RAM OF TROY - L422",
-    "SUBURBAN CADILLAC OF TROY - L421",
-    "SUBURBAN VOLVO CARS - L432",
-    "MERCEDES BENZ OF ANN ARBOR - L401",
-    "LITHIA FORD LINCOLN OF ROSEBURG - L061",
-    "HONDA OF SALEM - L242",
-    "GRAPEVINE HONDA - L346",
-    "HENDERSON HYUNDAI SUPERSTORE - L541",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF SPOKANE - L275",
-    "JOHN EAGLE HONDA OF DALLAS - L349",
-    "ACURA OF SHERMAN OAKS - L449",
-    "PORSCHE DOWNTOWN LA - L308",
-    "ELDER FORD OF ROMEO - L502",
-    "GENESIS OF LAS VEGAS - L445",
-    "BUICK GMC OF BEAVERTON - L257 & L258",
-    "DCH HONDA OF OXNARD - L715",
-    "LITHIA CHRYSLER JEEP DODGE OF SANTA FE - L155",
-    "CADILLAC OF PORTLAND DATA ONLY - L257",
-    "BUICK GMC OF BEAVERTON (DATA ONLY) - L258",
-    "AUDI FORT LAUDERDALE - L503",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF EUGENE - L059",
-    "LITHIA CHRYSLER JEEP DODGE RAM OF WASILLA - L252",
-    "DCH SUBARU OF THOUSAND OAKS - L363",
-    "SAHARA CHRYSLER DODGE RAM - L517",
-    "FREEDOM CDJR OF LEXINGTON - L580",
-    "AUDI CORAL SPRINGS - L504",
-    "LITHIA BMW OF SALEM - L240",
-    "CAMP CHEVROLET - L051",
-    "BMW OF SPOKANE - L052",
-    "MERCEDES-BENZ OF PORTLAND - L223",
-    "LITHIA TOYOTA OF SPRINGFIELD - L065",
-    "LITHIA FORD OF MISSOULA - L267",
-    "LITHIA CHEVROLET BUICK GMC OF HELENA - L146",
-    "LITHIA CHRYSLER DODGE JEEP RAM FIAT OF HELENA - L157",
-    "BMW OF ANCHORAGE - L154",
-    "SUBARU OF SPOKANE - L053",
-    "MINI OF ANCHORAGE - L235",
-    "LITHIA CHRYSLER DODGE JEEP RAM OF POCATELLO - L099",
-    "MERCEDES-BENZ OF LOS ANGELES - L304",
-    "STERLING BMW - L379",
-    "BELL ROAD TOYOTA - L378",
-    "LITHIA ELDER FORD TAMPA - L499",
-    "SUNRISE BUICK GMC AT WOLFCHASE - L815",
-    "COON RAPIDS CDJR - L803",
-    "HUDSON FORD - L801",
-    "AUDI MINNEAPOLIS - L805",
-    "AUDI ST. PAUL - L808",
-    "HYUNDAI WESLEY CHAPEL - L394",
-    "SUNRISE CHEVROLET BUICK GMC AT COLLIERVILLE - L816",
-    "ALL AMERICAN CHEVROLET OF ODESSA - L026",
-    "LITHIA CHRYSLER JEEP RAM FIAT OF BRYAN COLLEGE STATION - L173",
-    "ALL AMERICAN CHEVROLET OF MIDLAND - L011",
-    "BAIERL ACURA - L292",
-    "NEW PORT RICHEY VOLKSWAGEN - L395",
-    "HYUNDAI OF NEW PORT RICHEY - L396",
-    "MINI OF PORTLAND - L225"
-  ];
+  const stores = ["Store A", "Store B", "Store C"];
 
-  const [selectedStore, setSelectedStore] = useState("SUBURBAN NISSAN OF FARMINGTON HILLS - L408");
+  const [selectedStore, setSelectedStore] = useState("Store A");
 
-  // Initialize storeConfigs with defaults for all stores
   const [storeConfigs, setStoreConfigs] = useState(() => {
     const configs = {};
     stores.forEach(store => {
@@ -915,7 +615,6 @@ function GridCalculator() {
     return configs;
   });
 
-  // Initialize storeLocks with defaults for all stores
   const [storeLocks, setStoreLocks] = useState(() => {
     const locks = {};
     stores.forEach(store => {
@@ -934,13 +633,11 @@ function GridCalculator() {
   const lockButtonRef = useRef(null);
   let longPressTimer;
 
-  // Theme detection
   useEffect(() => {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setTheme(prefersDark ? 'dark' : 'light');
   }, []);
 
-  // Click outside handler for export menu
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -975,10 +672,9 @@ function GridCalculator() {
     const { baseRate, multiplier, mode, peakHours, q, capType, maxELR } = config;
     const numBaseRate = Number(baseRate) || 150;
     const p = Number(multiplier) || 0;
-    const numMultiplier = 1 + (p / 1000); // per 0.1 hour
+    const numMultiplier = 1 + (p / 1000);
     let effectivePeakHours;
 
-    // Determine effectivePeakHours based on capType
     if (mode === 'infinity') {
       effectivePeakHours = Infinity;
     } else if (capType === 'hours') {
@@ -986,7 +682,7 @@ function GridCalculator() {
     } else if (capType === 'elr') {
       const numMaxELR = Number(maxELR) || Infinity;
       if (p > 0) {
-        const a = p / 100; // scalingFactor = 1 + (p / 100) * (totalHours - 1)
+        const a = p / 100;
         const targetScalingFactor = numMaxELR / numBaseRate;
         effectivePeakHours = targetScalingFactor > 1 ? 1 + (targetScalingFactor - 1) / a : 1.0;
       } else {
@@ -1139,7 +835,7 @@ function GridCalculator() {
 
   const modes = [
     { name: 'infinity', icon: RiInfinityLine },
-    { name: 'hoursCap', icon: RiTimeLine },
+    { name: 'hoursCap', icon: RiAlignTop },
     { name: 'mirror', icon: RiTentFill },
     { name: 'proportional', icon: RiCrosshair2Fill }
   ];
