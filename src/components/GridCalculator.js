@@ -1012,6 +1012,15 @@ function GridCalculator() {
                         }));
                       }
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const inputHours = storeConfigs[selectedStore]?.inputHours;
+                        if (inputHours && !isNaN(Number(inputHours)) && Number(inputHours) >= 0) {
+                          handleCopyTotalAmount();
+                        }
+                      }
+                    }}
                     step="0.1"
                     min="0"
                     placeholder="e.g., 5.5"
