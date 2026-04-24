@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
 import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine } from 'react-icons/ri';
 import { jsPDF } from 'jspdf';
@@ -723,12 +723,12 @@ const FieldTooltipBubble = styled.div`
   background-color: ${({ theme }) => theme.tooltipBg};
   color: ${({ theme }) => theme.tooltipText};
   border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 12px;
-  line-height: 1.4;
-  width: 220px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  width: 280px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   z-index: 1500;
   pointer-events: none;
   white-space: normal;
@@ -741,7 +741,7 @@ const InfoIconButton = styled.button`
   color: ${({ theme }) => theme.text};
   opacity: 0.4;
   padding: 0 0 0 4px;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -806,7 +806,7 @@ const VersionLabel = styled.div`
   text-align: center;
 `;
 
-// FieldTooltip Component
+// FieldTooltip Component — standalone ⓘ icon with styled bubble
 const FieldTooltip = ({ text }) => {
   const [visible, setVisible] = useState(false);
   return (
@@ -821,6 +821,20 @@ const FieldTooltip = ({ text }) => {
       >
         ⓘ
       </InfoIconButton>
+      {visible && <FieldTooltipBubble>{text}</FieldTooltipBubble>}
+    </FieldTooltipWrapper>
+  );
+};
+
+// ButtonTooltip — wraps any element and shows styled tooltip on hover
+const ButtonTooltip = ({ text, children }) => {
+  const [visible, setVisible] = useState(false);
+  return (
+    <FieldTooltipWrapper
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      {children}
       {visible && <FieldTooltipBubble>{text}</FieldTooltipBubble>}
     </FieldTooltipWrapper>
   );
@@ -1344,40 +1358,42 @@ function GridCalculator() {
                 )}
                 {config.mode !== 'infinity' && (
                   <ModeSwitches>
-                    <ModeLabel>Cap Type <FieldTooltip text={config.capType === 'hours' ? TOOLTIPS.capTypeHours : TOOLTIPS.capTypeELR} /></ModeLabel>
+                    <ModeLabel>Cap Type <FieldTooltip text={TOOLTIPS.capType} /></ModeLabel>
                     <SwitchPanel>
                       <ModeButtons>
-                        <IconButton
-                          onClick={() => updateConfig({ capType: 'hours' })}
-                          active={config.capType === 'hours'}
-                          title={TOOLTIPS.capTypeHours}
-                        >
-                          <RiTimeLine size={24} />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => updateConfig({ capType: 'elr' })}
-                          active={config.capType === 'elr'}
-                          title={TOOLTIPS.capTypeELR}
-                        >
-                          <RiMoneyDollarBoxFill size={24} />
-                        </IconButton>
+                        <ButtonTooltip text={TOOLTIPS.capTypeHours}>
+                          <IconButton
+                            onClick={() => updateConfig({ capType: 'hours' })}
+                            active={config.capType === 'hours'}
+                          >
+                            <RiTimeLine size={24} />
+                          </IconButton>
+                        </ButtonTooltip>
+                        <ButtonTooltip text={TOOLTIPS.capTypeELR}>
+                          <IconButton
+                            onClick={() => updateConfig({ capType: 'elr' })}
+                            active={config.capType === 'elr'}
+                          >
+                            <RiMoneyDollarBoxFill size={24} />
+                          </IconButton>
+                        </ButtonTooltip>
                       </ModeButtons>
                     </SwitchPanel>
                   </ModeSwitches>
                 )}
                 <ModeSwitches>
-                  <ModeLabel>Grid Profile <FieldTooltip text={modes.find(m => m.name === config.mode)?.tooltip} /></ModeLabel>
+                  <ModeLabel>Grid Profile <FieldTooltip text={TOOLTIPS.gridProfile} /></ModeLabel>
                   <SwitchPanel>
                     <ModeButtons>
                       {modes.map((mode) => (
-                        <IconButton
-                          key={mode.name}
-                          onClick={() => updateConfig({ mode: mode.name })}
-                          active={config.mode === mode.name}
-                          title={mode.tooltip}
-                        >
-                          <mode.icon size={24} />
-                        </IconButton>
+                        <ButtonTooltip key={mode.name} text={mode.tooltip}>
+                          <IconButton
+                            onClick={() => updateConfig({ mode: mode.name })}
+                            active={config.mode === mode.name}
+                          >
+                            <mode.icon size={24} />
+                          </IconButton>
+                        </ButtonTooltip>
                       ))}
                     </ModeButtons>
                   </SwitchPanel>

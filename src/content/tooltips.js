@@ -17,21 +17,27 @@ export const TOOLTIPS = {
   enterHours:
     'Enter a specific labor time to calculate the exact matrix amount. Press Enter to copy the result.',
 
+  capType:
+    'Controls how the rate increase is capped — either by a specific hour limit or by a maximum Effective Labor Rate (ELR).',
+
   capTypeHours:
-    'Cap the rate increase by a specific hour. The rate scales up until Peak Hours, then behavior depends on the Grid Profile.',
+    'Cap by Hours: the rate scales up until the specified Peak Hours, then behavior is determined by the Grid Profile.',
 
   capTypeELR:
-    'Cap the rate increase by a maximum Effective Labor Rate. The calculator determines the equivalent peak hour automatically.',
+    'Cap by ELR: set a maximum Effective Labor Rate. The calculator automatically determines the equivalent peak hour.',
+
+  gridProfile:
+    'Defines the shape of the rate curve — how the labor rate behaves as hours increase beyond the peak.',
 
   modeInfinity:
-    'The rate increases indefinitely with no cap. Every 0.1 hour increment beyond 1.0 hr adds to the scaling factor.',
+    'Infinity: the rate increases indefinitely with no cap. Every 0.1 hour increment beyond 1.0 hr adds to the scaling factor.',
 
   modeHoursCap:
-    'The rate increases up to Peak Hours, then holds flat — the peak rate continues to apply for all hours beyond the cap.',
+    'Hours Cap: the rate increases up to Peak Hours, then holds flat — the peak rate continues to apply for all hours beyond the cap.',
 
   modeMirror:
-    'The rate increases up to Peak Hours, then mirrors back down symmetrically. At 2× Peak Hours the rate returns to base.',
+    'Mirror: the rate increases up to Peak Hours, then mirrors back down symmetrically. At 2× Peak Hours the rate returns to base.',
 
   modeProportional:
-    'The rate increases up to Peak Hours, then gradually decreases back to base rate by End Hours. Beyond End Hours the base rate applies.',
+    'Proportional: the rate increases up to Peak Hours, then gradually decreases back to base rate by End Hours. Beyond End Hours the base rate applies.',
 };
