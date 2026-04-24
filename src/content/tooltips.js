@@ -12,7 +12,7 @@ export const TOOLTIPS = {
     'The maximum Effective Labor Rate (ELR) allowed. The calculator works backwards to find the hour at which this rate would be reached and uses that as the peak.',
 
   endHours:
-    'Used in Proportional mode. The rate gradually decreases back to the base rate between Peak Hours and this value. Beyond End Hours the rate returns to base.',
+    'Used in Proportional mode. The rate decreases from peak back to base between Peak Hours and End Hours, then holds at base beyond that.',
 
   enterHours:
     'Enter a specific labor time to calculate the exact matrix amount. Press Enter to copy the result.',

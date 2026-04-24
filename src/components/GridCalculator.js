@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
 import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine } from 'react-icons/ri';
 import { jsPDF } from 'jspdf';
@@ -709,17 +710,21 @@ const Tooltip = styled.div`
   white-space: pre-line;
 `;
 
-const FieldTooltipWrapper = styled.div`
+const HintAnchor = styled.span`
   position: relative;
   display: inline-flex;
   align-items: center;
 `;
 
-const FieldTooltipBubble = styled.div`
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+const LabelRow = styled.div`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+`;
+
+const HintBubble = styled.div`
+  position: fixed;
   background-color: ${({ theme }) => theme.tooltipBg};
   color: ${({ theme }) => theme.tooltipText};
   border: 1px solid ${({ theme }) => theme.border};
@@ -728,6 +733,7 @@ const FieldTooltipBubble = styled.div`
   font-size: 14px;
   line-height: 1.5;
   width: 280px;
+  max-width: calc(100vw - 16px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   z-index: 1500;
   pointer-events: none;
@@ -740,7 +746,7 @@ const InfoIconButton = styled.button`
   cursor: pointer;
   color: ${({ theme }) => theme.text};
   opacity: 0.4;
-  padding: 0 0 0 4px;
+  padding: 0;
   font-size: 16px;
   line-height: 1;
   display: inline-flex;
@@ -806,39 +812,59 @@ const VersionLabel = styled.div`
   text-align: center;
 `;
 
-// FieldTooltip Component — standalone ⓘ icon with styled bubble
-const FieldTooltip = ({ text }) => {
+// HintTooltip — portal-rendered bubble that flips and clamps to stay in viewport
+const HintTooltip = ({ text, children }) => {
+  const anchorRef = useRef(null);
+  const bubbleRef = useRef(null);
   const [visible, setVisible] = useState(false);
+  const [coords, setCoords] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!visible || !anchorRef.current || !bubbleRef.current) return;
+    const a = anchorRef.current.getBoundingClientRect();
+    const b = bubbleRef.current.getBoundingClientRect();
+    const margin = 8;
+    let top = a.top - b.height - margin;
+    if (top < margin) top = a.bottom + margin;
+    let left = a.left + a.width / 2 - b.width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - b.width - margin));
+    setCoords({ top, left });
+  }, [visible, text]);
+
+  const show = () => setVisible(true);
+  const hide = () => { setVisible(false); setCoords(null); };
+
   return (
-    <FieldTooltipWrapper>
-      <InfoIconButton
-        onMouseEnter={() => setVisible(true)}
-        onMouseLeave={() => setVisible(false)}
-        onFocus={() => setVisible(true)}
-        onBlur={() => setVisible(false)}
-        tabIndex={0}
-        aria-label="More information"
-      >
-        ⓘ
-      </InfoIconButton>
-      {visible && <FieldTooltipBubble>{text}</FieldTooltipBubble>}
-    </FieldTooltipWrapper>
+    <HintAnchor
+      ref={anchorRef}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+    >
+      {children}
+      {visible && createPortal(
+        <HintBubble
+          ref={bubbleRef}
+          role="tooltip"
+          style={coords
+            ? { top: coords.top, left: coords.left, visibility: 'visible' }
+            : { top: 0, left: 0, visibility: 'hidden' }}
+        >
+          {text}
+        </HintBubble>,
+        document.body
+      )}
+    </HintAnchor>
   );
 };
 
-// ButtonTooltip — wraps any element and shows styled tooltip on hover
-const ButtonTooltip = ({ text, children }) => {
-  const [visible, setVisible] = useState(false);
-  return (
-    <FieldTooltipWrapper
-      onMouseEnter={() => setVisible(true)}
-      onMouseLeave={() => setVisible(false)}
-    >
-      {children}
-      {visible && <FieldTooltipBubble>{text}</FieldTooltipBubble>}
-    </FieldTooltipWrapper>
-  );
-};
+// InfoHint — the ⓘ affordance used beside input labels
+const InfoHint = ({ text }) => (
+  <HintTooltip text={text}>
+    <InfoIconButton type="button" aria-label="More information">ⓘ</InfoIconButton>
+  </HintTooltip>
+);
 
 // FadeWrapper Component
 const FadeWrapper = ({ show, children }) => {
@@ -954,8 +980,15 @@ function GridCalculator() {
     doc.setTextColor(90);
     doc.text(paramLine, pageWidth / 2, footerY, { align: 'center', maxWidth: usableWidth });
 
-    const pdfUrl = doc.output('bloburl');
-    window.open(pdfUrl, '_blank');
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const preview = window.open(url, '_blank');
+    if (preview) {
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } else {
+      URL.revokeObjectURL(url);
+      doc.save(buildFilename(storeName, 'pdf'));
+    }
   };
 
   const handleExportExcel = () => {
@@ -1237,7 +1270,10 @@ function GridCalculator() {
           <InputsContainer>
             <LeftInputs>
               <InputWrapper>
-                <Label>Base Rate <FieldTooltip text={TOOLTIPS.baseRate} /></Label>
+                <LabelRow>
+                  <Label>Base Rate</Label>
+                  <InfoHint text={TOOLTIPS.baseRate} />
+                </LabelRow>
                 <Input
                   type="number"
                   value={config.baseRate}
@@ -1246,7 +1282,10 @@ function GridCalculator() {
                 />
               </InputWrapper>
               <InputWrapper>
-                <Label>Increase / Hr <FieldTooltip text={TOOLTIPS.multiplier} /></Label>
+                <LabelRow>
+                  <Label>Increase / Hr</Label>
+                  <InfoHint text={TOOLTIPS.multiplier} />
+                </LabelRow>
                 <PercentageInputWrapper>
                   <PercentageInput
                     type="number"
@@ -1267,7 +1306,10 @@ function GridCalculator() {
               {config.mode !== 'infinity' && config.capType === 'hours' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="peakHours">
-                    <Label>Peak Hours <FieldTooltip text={TOOLTIPS.peakHours} /></Label>
+                    <LabelRow>
+                      <Label>Peak Hours</Label>
+                      <InfoHint text={TOOLTIPS.peakHours} />
+                    </LabelRow>
                     <Input
                       type="number"
                       value={config.peakHours ?? ''}
@@ -1287,7 +1329,10 @@ function GridCalculator() {
               {config.mode !== 'infinity' && config.capType === 'elr' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="maxELR">
-                    <Label>Max ELR <FieldTooltip text={TOOLTIPS.maxELR} /></Label>
+                    <LabelRow>
+                      <Label>Max ELR</Label>
+                      <InfoHint text={TOOLTIPS.maxELR} />
+                    </LabelRow>
                     <Input
                       type="number"
                       value={config.maxELR ?? ''}
@@ -1307,7 +1352,10 @@ function GridCalculator() {
               {config.mode === 'proportional' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="endHours">
-                    <Label>End Hours <FieldTooltip text={TOOLTIPS.endHours} /></Label>
+                    <LabelRow>
+                      <Label>End Hours</Label>
+                      <InfoHint text={TOOLTIPS.endHours} />
+                    </LabelRow>
                     <Input
                       type="number"
                       value={config.q}
@@ -1321,7 +1369,10 @@ function GridCalculator() {
               )}
               {viewMode === 'calculator' && (
                 <InputWrapper key="enterHours">
-                  <Label>Enter Hours <FieldTooltip text={TOOLTIPS.enterHours} /></Label>
+                  <LabelRow>
+                    <Label>Enter Hours</Label>
+                    <InfoHint text={TOOLTIPS.enterHours} />
+                  </LabelRow>
                   <Input
                     type="number"
                     value={config.inputHours || ''}
@@ -1358,42 +1409,55 @@ function GridCalculator() {
                 )}
                 {config.mode !== 'infinity' && (
                   <ModeSwitches>
-                    <ModeLabel>Cap Type <FieldTooltip text={TOOLTIPS.capType} /></ModeLabel>
+                    <ModeLabel>
+                      <LabelRow>
+                        <span>Cap Type</span>
+                        <InfoHint text={TOOLTIPS.capType} />
+                      </LabelRow>
+                    </ModeLabel>
                     <SwitchPanel>
                       <ModeButtons>
-                        <ButtonTooltip text={TOOLTIPS.capTypeHours}>
+                        <HintTooltip text={TOOLTIPS.capTypeHours}>
                           <IconButton
                             onClick={() => updateConfig({ capType: 'hours' })}
                             active={config.capType === 'hours'}
+                            aria-label="Cap by Hours"
                           >
                             <RiTimeLine size={24} />
                           </IconButton>
-                        </ButtonTooltip>
-                        <ButtonTooltip text={TOOLTIPS.capTypeELR}>
+                        </HintTooltip>
+                        <HintTooltip text={TOOLTIPS.capTypeELR}>
                           <IconButton
                             onClick={() => updateConfig({ capType: 'elr' })}
                             active={config.capType === 'elr'}
+                            aria-label="Cap by ELR"
                           >
                             <RiMoneyDollarBoxFill size={24} />
                           </IconButton>
-                        </ButtonTooltip>
+                        </HintTooltip>
                       </ModeButtons>
                     </SwitchPanel>
                   </ModeSwitches>
                 )}
                 <ModeSwitches>
-                  <ModeLabel>Grid Profile <FieldTooltip text={TOOLTIPS.gridProfile} /></ModeLabel>
+                  <ModeLabel>
+                    <LabelRow>
+                      <span>Grid Profile</span>
+                      <InfoHint text={TOOLTIPS.gridProfile} />
+                    </LabelRow>
+                  </ModeLabel>
                   <SwitchPanel>
                     <ModeButtons>
                       {modes.map((mode) => (
-                        <ButtonTooltip key={mode.name} text={mode.tooltip}>
+                        <HintTooltip key={mode.name} text={mode.tooltip}>
                           <IconButton
                             onClick={() => updateConfig({ mode: mode.name })}
                             active={config.mode === mode.name}
+                            aria-label={`${MODE_LABELS[mode.name]} mode`}
                           >
                             <mode.icon size={24} />
                           </IconButton>
-                        </ButtonTooltip>
+                        </HintTooltip>
                       ))}
                     </ModeButtons>
                   </SwitchPanel>
