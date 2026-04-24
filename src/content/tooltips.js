@@ -40,4 +40,10 @@ export const TOOLTIPS = {
 
   modeProportional:
     'Proportional: the rate increases up to Peak Hours, then gradually decreases back to base rate by End Hours. Beyond End Hours the base rate applies.',
+
+  graphSwitchToELR:
+    'Show ELR on graph',
+
+  graphSwitchToTotal:
+    'Show Total sales',
 };

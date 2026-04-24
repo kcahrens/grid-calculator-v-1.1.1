@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine, RiBarChartLine } from 'react-icons/ri';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx-js-style';
@@ -1400,12 +1400,17 @@ function GridCalculator() {
             <RightInputs>
               <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
                 {viewMode === 'graph' && (
-                  <GraphSwitchButton
-                    onClick={() => setShowDollarAmount(!showDollarAmount)}
-                    noHover={true}
-                  >
-                    <RiExchangeDollarLine size={24} />
-                  </GraphSwitchButton>
+                  <HintTooltip text={showDollarAmount ? TOOLTIPS.graphSwitchToELR : TOOLTIPS.graphSwitchToTotal}>
+                    <GraphSwitchButton
+                      onClick={() => setShowDollarAmount(!showDollarAmount)}
+                      noHover={true}
+                      aria-label={showDollarAmount ? 'Show ELR on graph' : 'Show Total sales on graph'}
+                    >
+                      {showDollarAmount
+                        ? <RiBarChartLine size={24} />
+                        : <RiExchangeDollarLine size={24} />}
+                    </GraphSwitchButton>
+                  </HintTooltip>
                 )}
                 {config.mode !== 'infinity' && (
                   <ModeSwitches>
