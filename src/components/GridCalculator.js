@@ -45,6 +45,84 @@ const buildParameterRows = (config, storeName) => {
   return rows;
 };
 
+const calculateValue = (totalHours, config = DEFAULT_CONFIG) => {
+  const { baseRate, multiplier, mode, peakHours, q, capType, maxELR } = config;
+  const numBaseRate = Number(baseRate) || 150;
+  const p = Number(multiplier) || 0;
+  const numMultiplier = 1 + (p / 1000);
+  let effectivePeakHours;
+
+  if (mode === 'infinity') {
+    effectivePeakHours = Infinity;
+  } else if (capType === 'hours') {
+    effectivePeakHours = Number(peakHours) || Infinity;
+  } else if (capType === 'elr') {
+    const numMaxELR = Number(maxELR) || Infinity;
+    if (p > 0) {
+      const a = p / 100;
+      const targetScalingFactor = numMaxELR / numBaseRate;
+      effectivePeakHours = targetScalingFactor > 1 ? 1 + (targetScalingFactor - 1) / a : 1.0;
+    } else {
+      effectivePeakHours = Infinity;
+    }
+  } else {
+    effectivePeakHours = Infinity;
+  }
+
+  const numQ = Number(q) || 0;
+
+  if (totalHours <= 0) return 0;
+
+  const k = Math.round(totalHours * 10);
+  let cellsPastOne = Math.max(0, k - 10);
+  let scalingFactor = 1;
+
+  if (mode === 'infinity') {
+    scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+  } else if (mode === 'hoursCap') {
+    const peakCells = Math.round(effectivePeakHours * 10) - 10;
+    cellsPastOne = Math.min(cellsPastOne, peakCells);
+    scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+  } else if (mode === 'mirror') {
+    const peakCells = Math.round(effectivePeakHours * 10) - 10;
+    if (totalHours <= effectivePeakHours) {
+      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+    } else {
+      const cellsPastPeak = k - Math.round(effectivePeakHours * 10);
+      const mirroredCells = peakCells - cellsPastPeak;
+      cellsPastOne = Math.max(0, mirroredCells);
+      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+    }
+  } else if (mode === 'proportional') {
+    const peakCells = Math.max(0, Math.round(effectivePeakHours * 10) - 10);
+    if (config.q === '') {
+      const effectiveCellsPastOne = Math.min(cellsPastOne, peakCells);
+      scalingFactor = 1 + (numMultiplier - 1) * effectiveCellsPastOne;
+    } else {
+      const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
+      if (totalHours <= effectivePeakHours) {
+        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+      } else if (totalHours <= numQ && numQ > effectivePeakHours) {
+        const decreaseFactor = (totalHours - effectivePeakHours) / (numQ - effectivePeakHours);
+        scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
+      } else {
+        scalingFactor = 1;
+      }
+    }
+  }
+
+  let totalAmount = numBaseRate * scalingFactor * totalHours;
+
+  if (mode === 'hoursCap' && totalHours > effectivePeakHours) {
+    const peakCells = Math.round(effectivePeakHours * 10) - 10;
+    const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
+    const peakAmount = numBaseRate * peakScalingFactor * effectivePeakHours;
+    totalAmount = peakAmount + (totalHours - effectivePeakHours) * numBaseRate * peakScalingFactor;
+  }
+
+  return Number(totalAmount.toFixed(2));
+};
+
 const buildFilename = (store, ext) => {
   const safeStore = (store || '').trim().replace(/\s+/g, '_');
   const date = new Date().toISOString().slice(0, 10);
@@ -712,6 +790,7 @@ function GridCalculator() {
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: '' });
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showCopyToast, setShowCopyToast] = useState(false);
+  const [copyToastMessage, setCopyToastMessage] = useState('Copied!');
   const [importModalState, setImportModalState] = useState({ open: false, pending: null, error: null, dragActive: false });
   const dropdownRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -925,7 +1004,7 @@ function GridCalculator() {
     setStoreName(pending.storeName);
     setConfig(pending.config);
     closeImportModal();
-    triggerCopyToast();
+    triggerToast('Imported!');
   };
 
   const handleFileInputChange = (e) => {
@@ -951,84 +1030,6 @@ function GridCalculator() {
     setImportModalState((s) => ({ ...s, dragActive: false }));
   };
 
-  const calculateValue = (totalHours, config = DEFAULT_CONFIG) => {
-    const { baseRate, multiplier, mode, peakHours, q, capType, maxELR } = config;
-    const numBaseRate = Number(baseRate) || 150;
-    const p = Number(multiplier) || 0;
-    const numMultiplier = 1 + (p / 1000);
-    let effectivePeakHours;
-
-    if (mode === 'infinity') {
-      effectivePeakHours = Infinity;
-    } else if (capType === 'hours') {
-      effectivePeakHours = Number(peakHours) || Infinity;
-    } else if (capType === 'elr') {
-      const numMaxELR = Number(maxELR) || Infinity;
-      if (p > 0) {
-        const a = p / 100;
-        const targetScalingFactor = numMaxELR / numBaseRate;
-        effectivePeakHours = targetScalingFactor > 1 ? 1 + (targetScalingFactor - 1) / a : 1.0;
-      } else {
-        effectivePeakHours = Infinity;
-      }
-    } else {
-      effectivePeakHours = Infinity;
-    }
-
-    const numQ = Number(q) || 0;
-
-    if (totalHours <= 0) return 0;
-
-    const k = Math.round(totalHours * 10);
-    let cellsPastOne = Math.max(0, k - 10);
-    let scalingFactor = 1;
-
-    if (mode === 'infinity') {
-      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-    } else if (mode === 'hoursCap') {
-      const peakCells = Math.round(effectivePeakHours * 10) - 10;
-      cellsPastOne = Math.min(cellsPastOne, peakCells);
-      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-    } else if (mode === 'mirror') {
-      const peakCells = Math.round(effectivePeakHours * 10) - 10;
-      if (totalHours <= effectivePeakHours) {
-        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-      } else {
-        const cellsPastPeak = k - Math.round(effectivePeakHours * 10);
-        const mirroredCells = peakCells - cellsPastPeak;
-        cellsPastOne = Math.max(0, mirroredCells);
-        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-      }
-    } else if (mode === 'proportional') {
-      const peakCells = Math.max(0, Math.round(effectivePeakHours * 10) - 10);
-      if (config.q === '') {
-        const effectiveCellsPastOne = Math.min(cellsPastOne, peakCells);
-        scalingFactor = 1 + (numMultiplier - 1) * effectiveCellsPastOne;
-      } else {
-        const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-        if (totalHours <= effectivePeakHours) {
-          scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-        } else if (totalHours <= numQ && numQ > effectivePeakHours) {
-          const decreaseFactor = (totalHours - effectivePeakHours) / (numQ - effectivePeakHours);
-          scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
-        } else {
-          scalingFactor = 1;
-        }
-      }
-    }
-
-    let totalAmount = numBaseRate * scalingFactor * totalHours;
-
-    if (mode === 'hoursCap' && totalHours > effectivePeakHours) {
-      const peakCells = Math.round(effectivePeakHours * 10) - 10;
-      const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-      const peakAmount = numBaseRate * peakScalingFactor * effectivePeakHours;
-      totalAmount = peakAmount + (totalHours - effectivePeakHours) * numBaseRate * peakScalingFactor;
-    }
-
-    return Number(totalAmount.toFixed(2));
-  };
-
   const graphData = useMemo(() => {
     const data = [];
     hourRates.forEach((hourRate) => {
@@ -1042,7 +1043,6 @@ function GridCalculator() {
       });
     });
     return data.sort((a, b) => a.hours - b.hours);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, hourRates, increments]);
 
   const handleMouseEnter = (e, hourRate, inc) => {
@@ -1071,27 +1071,28 @@ function GridCalculator() {
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text)
       .then(() => console.log(`Copied: ${text}`))
-      .catch(err => console.error('Failed to copy: ', err));
+      .catch(() => triggerToast('Failed to copy'));
   };
 
-  const handleCopyTotalAmount = () => {
-    copyToClipboard(totalAmount.toFixed(2));
-    triggerCopyToast();
-  };
-
-  const handleGridCellClick = (value) => {
-    copyToClipboard(value.toString());
-    triggerCopyToast();
-  };
-
-  const triggerCopyToast = () => {
+  const triggerToast = (message = 'Copied!') => {
+    setCopyToastMessage(message);
     setShowCopyToast(true);
     setTimeout(() => setShowCopyToast(false), 1500);
   };
 
+  const handleCopyTotalAmount = () => {
+    copyToClipboard(totalAmount.toFixed(2));
+    triggerToast();
+  };
+
+  const handleGridCellClick = (value) => {
+    copyToClipboard(value.toString());
+    triggerToast();
+  };
+
   const onCopyValue = (value) => {
     copyToClipboard(value);
-    triggerCopyToast();
+    triggerToast();
   };
 
   const modes = [
@@ -1416,7 +1417,7 @@ function GridCalculator() {
         <Tooltip show={tooltip.show} x={tooltip.x} y={tooltip.y}>
           {tooltip.content}
         </Tooltip>
-        <CopyToast show={showCopyToast}>Copied!</CopyToast>
+        <CopyToast show={showCopyToast}>{copyToastMessage}</CopyToast>
       </AppContainer>
     </ThemeProvider>
   );
