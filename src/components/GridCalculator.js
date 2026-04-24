@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine, RiBarChartLine } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine, RiBarChartLine } from 'react-icons/ri';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx-js-style';
@@ -1245,15 +1245,6 @@ function GridCalculator() {
             aria-label="Store name"
           />
           <ButtonGroup>
-            <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
-              <RiLineChartLine size={24} />
-            </IconButton>
-            <IconButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
-              <RiTableLine size={24} />
-            </IconButton>
-            <IconButton onClick={() => setViewMode('calculator')} active={viewMode === 'calculator'}>
-              <RiFlashlightLine size={24} />
-            </IconButton>
             {viewMode === 'grid' && (
               <ExportDropdown ref={dropdownRef}>
                 <IconButton onClick={() => setShowExportMenu(!showExportMenu)} title="Export / Import">
@@ -1272,6 +1263,12 @@ function GridCalculator() {
                 </ExportMenu>
               </ExportDropdown>
             )}
+            <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
+              <RiLineChartLine size={24} />
+            </IconButton>
+            <IconButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
+              <RiTableLine size={24} />
+            </IconButton>
             <IconButton onClick={toggleTheme}>
               {theme === 'light' ? <RiSunLine size={24} /> : <RiMoonLine size={24} />}
             </IconButton>
