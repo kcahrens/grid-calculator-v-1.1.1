@@ -4,8 +4,10 @@ import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLi
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx-js-style';
-import { version } from '../../package.json';
+import pkg from '../../package.json';
 import Graph from './Graph';
+
+const { version } = pkg;
 
 const MODE_LABELS = {
   infinity: 'Infinity',
