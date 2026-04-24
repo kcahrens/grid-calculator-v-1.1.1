@@ -369,8 +369,6 @@ const IconButton = styled.button`
 const GraphSwitchButton = styled(IconButton)`
   position: relative;
   top: 28px;
-  background: none;
-  border: none;
 `;
 
 const ExportDropdown = styled.div`
@@ -823,7 +821,12 @@ const HintTooltip = ({ text, children }) => {
 
   useLayoutEffect(() => {
     if (!visible || !anchorRef.current || !bubbleRef.current) return;
-    const a = anchorRef.current.getBoundingClientRect();
+    // Measure the child (the actual button/icon), not the wrapper span.
+    // Children may use position:relative/top offsets that the wrapper's
+    // layout box doesn't account for, which would anchor the tooltip in
+    // the wrong place.
+    const target = anchorRef.current.firstElementChild || anchorRef.current;
+    const a = target.getBoundingClientRect();
     const b = bubbleRef.current.getBoundingClientRect();
     const margin = 8;
     let top = a.top - b.height - margin;
@@ -1411,7 +1414,6 @@ function GridCalculator() {
                   <HintTooltip text={showDollarAmount ? TOOLTIPS.graphSwitchToELR : TOOLTIPS.graphSwitchToTotal}>
                     <GraphSwitchButton
                       onClick={() => setShowDollarAmount(!showDollarAmount)}
-                      noHover={true}
                       aria-label={showDollarAmount ? 'Show ELR on graph' : 'Show Total sales on graph'}
                     >
                       {showDollarAmount
