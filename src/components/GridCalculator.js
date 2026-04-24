@@ -732,8 +732,8 @@ const HintBubble = styled.div`
   padding: 12px 14px;
   font-size: 14px;
   line-height: 1.5;
-  width: 280px;
-  max-width: calc(100vw - 16px);
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   z-index: 1500;
   pointer-events: none;
@@ -816,8 +816,10 @@ const VersionLabel = styled.div`
 const HintTooltip = ({ text, children }) => {
   const anchorRef = useRef(null);
   const bubbleRef = useRef(null);
-  const [visible, setVisible] = useState(false);
+  const [hoverShown, setHoverShown] = useState(false);
+  const [focusShown, setFocusShown] = useState(false);
   const [coords, setCoords] = useState(null);
+  const visible = hoverShown || focusShown;
 
   useLayoutEffect(() => {
     if (!visible || !anchorRef.current || !bubbleRef.current) return;
@@ -831,16 +833,22 @@ const HintTooltip = ({ text, children }) => {
     setCoords({ top, left });
   }, [visible, text]);
 
-  const show = () => setVisible(true);
-  const hide = () => { setVisible(false); setCoords(null); };
+  const handleFocus = (e) => {
+    // Only show on keyboard focus — suppresses the tooltip hanging around
+    // after a mouse click on the wrapped button.
+    const target = e.target;
+    if (target && typeof target.matches === 'function' && target.matches(':focus-visible')) {
+      setFocusShown(true);
+    }
+  };
 
   return (
     <HintAnchor
       ref={anchorRef}
-      onMouseEnter={show}
-      onMouseLeave={hide}
-      onFocus={show}
-      onBlur={hide}
+      onMouseEnter={() => setHoverShown(true)}
+      onMouseLeave={() => setHoverShown(false)}
+      onFocus={handleFocus}
+      onBlur={() => setFocusShown(false)}
     >
       {children}
       {visible && createPortal(
