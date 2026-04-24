@@ -1,23 +1,228 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiLockLine, RiLockUnlockLine, RiUploadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine } from 'react-icons/ri';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx-js-style';
+import pkg from '../../package.json';
 import Graph from './Graph';
 
-// Global default configuration for stores
-const DEFAULT_STORE_CONFIG = {
+const { version } = pkg;
+
+const MODE_LABELS = {
+  infinity: 'Infinity',
+  hoursCap: 'Hours Cap',
+  mirror: 'Mirror',
+  proportional: 'Proportional'
+};
+const CAP_TYPE_LABELS = { hours: 'Hours', elr: 'ELR' };
+const MODE_VALUES = Object.keys(MODE_LABELS);
+const CAP_TYPE_VALUES = Object.keys(CAP_TYPE_LABELS);
+const VIEW_MODES = ['grid', 'graph', 'calculator'];
+
+const DEFAULT_CONFIG = {
   baseRate: '150',
-  multiplier: '2', // Represents % increase per hour
+  multiplier: '2',
   peakHours: '5',
   mode: 'infinity',
   q: '20',
   inputHours: '',
-  capType: 'hours', // New: 'hours' or 'elr'
-  maxELR: '200'     // New: Maximum Effective Labor Rate when capType is 'elr'
+  capType: 'hours',
+  maxELR: '200'
 };
 
-const DEFAULT_STORE_LOCK = {
-  isLocked: false,
-  lockedAt: null
+const buildParameterRows = (config, storeName) => {
+  const rows = [
+    ['Exported', new Date().toLocaleString()],
+    ['Store Name', storeName || ''],
+    ['Base Rate', config.baseRate],
+    ['Increase / Hr (%)', config.multiplier],
+    ['Grid Profile', MODE_LABELS[config.mode] || config.mode]
+  ];
+  if (config.mode !== 'infinity') {
+    rows.push(['Cap Type', CAP_TYPE_LABELS[config.capType] || config.capType]);
+    if (config.capType === 'hours') rows.push(['Peak Hours', config.peakHours]);
+    if (config.capType === 'elr') rows.push(['Max ELR', config.maxELR]);
+  }
+  if (config.mode === 'proportional') rows.push(['End Hours', config.q]);
+  return rows;
+};
+
+const calculateValue = (totalHours, config = DEFAULT_CONFIG) => {
+  const { baseRate, multiplier, mode, peakHours, q, capType, maxELR } = config;
+  const numBaseRate = Number(baseRate) || 150;
+  const p = Number(multiplier) || 0;
+  const numMultiplier = 1 + (p / 1000);
+  let effectivePeakHours;
+
+  if (mode === 'infinity') {
+    effectivePeakHours = Infinity;
+  } else if (capType === 'hours') {
+    effectivePeakHours = Number(peakHours) || Infinity;
+  } else if (capType === 'elr') {
+    const numMaxELR = Number(maxELR) || Infinity;
+    if (p > 0) {
+      const a = p / 100;
+      const targetScalingFactor = numMaxELR / numBaseRate;
+      effectivePeakHours = targetScalingFactor > 1 ? 1 + (targetScalingFactor - 1) / a : 1.0;
+    } else {
+      effectivePeakHours = Infinity;
+    }
+  } else {
+    effectivePeakHours = Infinity;
+  }
+
+  const numQ = Number(q) || 0;
+
+  if (totalHours <= 0) return 0;
+
+  const k = Math.round(totalHours * 10);
+  let cellsPastOne = Math.max(0, k - 10);
+  let scalingFactor = 1;
+
+  if (mode === 'infinity') {
+    scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+  } else if (mode === 'hoursCap') {
+    const peakCells = Math.round(effectivePeakHours * 10) - 10;
+    cellsPastOne = Math.min(cellsPastOne, peakCells);
+    scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+  } else if (mode === 'mirror') {
+    const peakCells = Math.round(effectivePeakHours * 10) - 10;
+    if (totalHours <= effectivePeakHours) {
+      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+    } else {
+      const cellsPastPeak = k - Math.round(effectivePeakHours * 10);
+      const mirroredCells = peakCells - cellsPastPeak;
+      cellsPastOne = Math.max(0, mirroredCells);
+      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+    }
+  } else if (mode === 'proportional') {
+    const peakCells = Math.max(0, Math.round(effectivePeakHours * 10) - 10);
+    if (config.q === '') {
+      const effectiveCellsPastOne = Math.min(cellsPastOne, peakCells);
+      scalingFactor = 1 + (numMultiplier - 1) * effectiveCellsPastOne;
+    } else {
+      const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
+      if (totalHours <= effectivePeakHours) {
+        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
+      } else if (totalHours <= numQ && numQ > effectivePeakHours) {
+        const decreaseFactor = (totalHours - effectivePeakHours) / (numQ - effectivePeakHours);
+        scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
+      } else {
+        scalingFactor = 1;
+      }
+    }
+  }
+
+  let totalAmount = numBaseRate * scalingFactor * totalHours;
+
+  if (mode === 'hoursCap' && totalHours > effectivePeakHours) {
+    const peakCells = Math.round(effectivePeakHours * 10) - 10;
+    const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
+    const peakAmount = numBaseRate * peakScalingFactor * effectivePeakHours;
+    totalAmount = peakAmount + (totalHours - effectivePeakHours) * numBaseRate * peakScalingFactor;
+  }
+
+  return Number(totalAmount.toFixed(2));
+};
+
+const buildFilename = (store, ext) => {
+  const safeStore = (store || '').trim().replace(/\s+/g, '_');
+  const date = new Date().toISOString().slice(0, 10);
+  return safeStore
+    ? `LaborRateMatrix_${safeStore}_${date}.${ext}`
+    : `LaborRateMatrix_${date}.${ext}`;
+};
+
+const buildExcelTitle = (store) => {
+  const trimmed = (store || '').trim();
+  return trimmed ? `Labor Rate Matrix — ${trimmed}` : 'Labor Rate Matrix';
+};
+
+const readStateFromURL = () => {
+  const params = new URLSearchParams(window.location.search);
+  const get = (k) => params.get(k);
+  const mode = MODE_VALUES.includes(get('mode')) ? get('mode') : DEFAULT_CONFIG.mode;
+  const capType = CAP_TYPE_VALUES.includes(get('cap')) ? get('cap') : DEFAULT_CONFIG.capType;
+  const view = VIEW_MODES.includes(get('view')) ? get('view') : 'grid';
+  const theme = get('theme') === 'dark' || get('theme') === 'light' ? get('theme') : null;
+  return {
+    storeName: get('name') || '',
+    config: {
+      baseRate: get('base') ?? DEFAULT_CONFIG.baseRate,
+      multiplier: get('inc') ?? DEFAULT_CONFIG.multiplier,
+      mode,
+      capType,
+      peakHours: get('peak') ?? DEFAULT_CONFIG.peakHours,
+      maxELR: get('maxelr') ?? DEFAULT_CONFIG.maxELR,
+      q: get('end') ?? DEFAULT_CONFIG.q,
+      inputHours: get('hours') ?? DEFAULT_CONFIG.inputHours
+    },
+    viewMode: view,
+    theme
+  };
+};
+
+const writeStateToURL = ({ storeName, config, viewMode, theme }) => {
+  const params = new URLSearchParams();
+  if (storeName) params.set('name', storeName);
+  if (config.baseRate !== DEFAULT_CONFIG.baseRate) params.set('base', config.baseRate);
+  if (config.multiplier !== DEFAULT_CONFIG.multiplier) params.set('inc', config.multiplier);
+  if (config.mode !== DEFAULT_CONFIG.mode) params.set('mode', config.mode);
+  if (config.mode !== 'infinity') {
+    if (config.capType !== DEFAULT_CONFIG.capType) params.set('cap', config.capType);
+    if (config.capType === 'hours' && config.peakHours !== DEFAULT_CONFIG.peakHours) {
+      params.set('peak', config.peakHours);
+    }
+    if (config.capType === 'elr' && config.maxELR !== DEFAULT_CONFIG.maxELR) {
+      params.set('maxelr', config.maxELR);
+    }
+  }
+  if (config.mode === 'proportional' && config.q !== DEFAULT_CONFIG.q) params.set('end', config.q);
+  if (config.inputHours) params.set('hours', config.inputHours);
+  if (viewMode !== 'grid') params.set('view', viewMode);
+  if (theme) params.set('theme', theme);
+  const qs = params.toString();
+  const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  window.history.replaceState(null, '', url);
+};
+
+const MODE_LABEL_TO_VALUE = Object.fromEntries(
+  Object.entries(MODE_LABELS).map(([k, v]) => [v, k])
+);
+const CAP_LABEL_TO_VALUE = Object.fromEntries(
+  Object.entries(CAP_TYPE_LABELS).map(([k, v]) => [v, k])
+);
+
+const parseImportedWorkbook = (wb) => {
+  const sheet = wb.Sheets['Parameters'];
+  if (!sheet) throw new Error("This isn't a Labor Rate Matrix export.");
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  const map = {};
+  rows.forEach((row) => {
+    if (Array.isArray(row) && row.length >= 2 && row[0]) {
+      map[String(row[0])] = row[1];
+    }
+  });
+  const modeLabel = map['Grid Profile'];
+  const mode = MODE_LABEL_TO_VALUE[modeLabel];
+  if (!mode) throw new Error("This isn't a Labor Rate Matrix export.");
+  const capLabel = map['Cap Type'];
+  const capType = capLabel ? (CAP_LABEL_TO_VALUE[capLabel] || DEFAULT_CONFIG.capType) : DEFAULT_CONFIG.capType;
+  const asString = (v, fallback) => (v === undefined || v === null || v === '' ? fallback : String(v));
+  return {
+    storeName: asString(map['Store Name'], ''),
+    config: {
+      baseRate: asString(map['Base Rate'], DEFAULT_CONFIG.baseRate),
+      multiplier: asString(map['Increase / Hr (%)'], DEFAULT_CONFIG.multiplier),
+      mode,
+      capType,
+      peakHours: asString(map['Peak Hours'], DEFAULT_CONFIG.peakHours),
+      maxELR: asString(map['Max ELR'], DEFAULT_CONFIG.maxELR),
+      q: asString(map['End Hours'], DEFAULT_CONFIG.q),
+      inputHours: ''
+    }
+  };
 };
 
 // Themes
@@ -105,40 +310,16 @@ const Title = styled.h1`
   }
 `;
 
-const SearchableSelectContainer = styled.div`
-  position: relative;
+const StoreNameInput = styled.input`
   flex: 1 1 auto;
   min-width: 200px;
   max-width: 472px;
-  width: 100%;
-  @media (max-width: 600px) {
-    width: 100%;
-    max-width: 472px;
-  }
-`;
-
-const SearchInputWrapper = styled.div`
-  position: relative;
-  width: 100%;
-  &::after {
-    content: '▼';
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: ${({ theme }) => theme.text};
-    pointer-events: none;
-  }
-`;
-
-const SearchInput = styled.input`
-  padding: 8px 30px 8px 12px;
+  padding: 8px 12px;
   background-color: ${({ theme }) => theme.cardBg};
   color: ${({ theme }) => theme.text};
   border: 1px solid ${({ theme }) => theme.border};
   border-radius: 8px;
   font-size: 16px;
-  width: 100%;
   box-sizing: border-box;
   transition: border-color 0.2s ease;
   &:focus {
@@ -148,37 +329,8 @@ const SearchInput = styled.input`
   &:hover {
     border-color: ${({ theme }) => theme.accent};
   }
-`;
-
-const OptionsList = styled.ul`
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background-color: ${({ theme }) => theme.cardBg};
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 8px;
-  max-height: 200px;
-  overflow-y: auto;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  z-index: 10;
-  display: ${({ isOpen }) => (isOpen ? 'block' : 'none')};
-`;
-
-const OptionItem = styled.li`
-  padding: 8px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  background-color: ${({ isHighlighted, theme }) =>
-    isHighlighted ? theme.accent : 'transparent'};
-  color: ${({ isHighlighted, isLocked, theme }) =>
-    isHighlighted ? '#fff' : (isLocked ? 'red' : theme.text)};
-  &:hover {
-    background-color: ${({ theme }) => theme.accent};
-    color: #fff;
+  @media (max-width: 600px) {
+    width: 100%;
   }
 `;
 
@@ -194,8 +346,8 @@ const IconButton = styled.button`
   border: none;
   cursor: ${({ disabled }) => (disabled ? 'not-allowed' : 'pointer')};
   padding: 8px;
-  color: ${({ active, theme, isLockButton, isLocked, disabled }) => 
-    disabled ? theme.disabledText : (isLockButton && isLocked ? '#ff0000' : (active ? '#fff' : theme.text))};
+  color: ${({ active, theme, disabled }) =>
+    disabled ? theme.disabledText : (active ? '#fff' : theme.text)};
   border-radius: 8px;
   opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
   width: 40px;
@@ -205,10 +357,10 @@ const IconButton = styled.button`
   align-items: center;
   justify-content: center;
   &:hover {
-    background: ${({ theme, isLockButton, isLocked, noHover, disabled }) => 
-      disabled ? 'none' : (noHover ? 'none' : (isLockButton && isLocked ? 'rgba(255, 0, 0, 0.1)' : theme.accent))};
-    color: ${({ isLockButton, isLocked, noHover, theme, disabled }) => 
-      disabled ? theme.disabledText : (noHover ? (isLockButton && isLocked ? '#ff0000' : theme.text) : (isLockButton && isLocked ? '#ff0000' : '#fff'))};
+    background: ${({ theme, noHover, disabled }) =>
+      disabled || noHover ? 'none' : theme.accent};
+    color: ${({ noHover, theme, disabled }) =>
+      disabled ? theme.disabledText : (noHover ? theme.text : '#fff')};
   }
 `;
 
@@ -261,6 +413,117 @@ const Card = styled.div`
   padding: 30px;
   max-width: 1200px;
   width: 100%;
+`;
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 20px;
+`;
+
+const Modal = styled.div`
+  background-color: ${({ theme }) => theme.cardBg};
+  color: ${({ theme }) => theme.text};
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  position: relative;
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+`;
+
+const ModalTitle = styled.h2`
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+`;
+
+const ModalCloseButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.text};
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  &:hover {
+    background: ${({ theme }) => theme.border};
+  }
+`;
+
+const DropZone = styled.div`
+  border: 2px dashed ${({ active, theme }) => (active ? theme.accent : theme.border)};
+  background: ${({ active, theme }) => (active ? `${theme.accent}14` : 'transparent')};
+  border-radius: 12px;
+  padding: 32px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  &:hover {
+    border-color: ${({ theme }) => theme.accent};
+  }
+`;
+
+const DropZoneText = styled.p`
+  margin: 0 0 6px 0;
+  font-size: 15px;
+`;
+
+const DropZoneSubtext = styled.p`
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.7;
+`;
+
+const HiddenFileInput = styled.input`
+  display: none;
+`;
+
+const ModalMessage = styled.p`
+  font-size: 15px;
+  line-height: 1.4;
+  margin: 0 0 20px 0;
+`;
+
+const ModalError = styled.p`
+  color: #d32f2f;
+  font-size: 14px;
+  margin: 12px 0 0 0;
+`;
+
+const ModalActions = styled.div`
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+`;
+
+const ModalButton = styled.button`
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid ${({ primary, theme }) => (primary ? theme.accent : theme.border)};
+  background: ${({ primary, theme }) => (primary ? theme.accent : 'transparent')};
+  color: ${({ primary, theme }) => (primary ? '#fff' : theme.text)};
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover {
+    opacity: 0.9;
+  }
 `;
 
 const InputsContainer = styled.div`
@@ -495,6 +758,14 @@ const CopyToast = styled.div`
   pointer-events: none;
 `;
 
+const VersionLabel = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.text};
+  opacity: 0.4;
+  margin-top: 16px;
+  text-align: center;
+`;
+
 // FadeWrapper Component
 const FadeWrapper = ({ show, children }) => {
   const [shouldRender, setShouldRender] = useState(show);
@@ -515,128 +786,35 @@ const FadeWrapper = ({ show, children }) => {
   ) : null;
 };
 
-// StoreDropdown Component
-const StoreDropdown = ({ selectedStore, setSelectedStore, storeLocks }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const dropdownRef = useRef(null);
-
-  const stores = ["Store A", "Store B", "Store C"];
-
-  const filteredStores = stores.filter(store =>
-    store.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-        setSearchTerm('');
-        setHighlightedIndex(-1);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleSelect = (store) => {
-    setSelectedStore(store);
-    setSearchTerm('');
-    setIsOpen(false);
-    setHighlightedIndex(-1);
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (!isOpen) setIsOpen(true);
-      else setHighlightedIndex(prev => prev === -1 ? 0 : Math.min(prev + 1, filteredStores.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (isOpen) setHighlightedIndex(prev => prev === -1 ? filteredStores.length - 1 : Math.max(prev - 1, 0));
-    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
-      e.preventDefault();
-      handleSelect(filteredStores[highlightedIndex]);
-    }
-  };
-
-  return (
-    <SearchableSelectContainer ref={dropdownRef}>
-      <SearchInputWrapper>
-        <SearchInput
-          type="text"
-          value={isOpen ? searchTerm : selectedStore || ''}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setHighlightedIndex(-1);
-            if (!isOpen) setIsOpen(true);
-          }}
-          onFocus={() => {
-            setIsOpen(true);
-            setSearchTerm('');
-            setHighlightedIndex(-1);
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder={isOpen ? 'Search stores...' : 'Select a store'}
-        />
-      </SearchInputWrapper>
-      <OptionsList isOpen={isOpen}>
-        {filteredStores.map((store, index) => (
-          <OptionItem
-            key={store}
-            onClick={() => handleSelect(store)}
-            isHighlighted={index === highlightedIndex}
-            isLocked={storeLocks[store]?.isLocked || false}
-          >
-            <span>{store}</span>
-            <div style={{ flexGrow: 1 }} />
-            {storeLocks[store]?.isLocked && (
-              <RiLockLine title={`Locked at: ${new Date(storeLocks[store].lockedAt).toLocaleString()}`} />
-            )}
-          </OptionItem>
-        ))}
-      </OptionsList>
-    </SearchableSelectContainer>
-  );
-};
-
 // Main Component
 function GridCalculator() {
-  const stores = ["Store A", "Store B", "Store C"];
+  const initialState = useMemo(() => readStateFromURL(), []);
 
-  const [selectedStore, setSelectedStore] = useState("Store A");
-
-  const [storeConfigs, setStoreConfigs] = useState(() => {
-    const configs = {};
-    stores.forEach(store => {
-      configs[store] = { ...DEFAULT_STORE_CONFIG };
-    });
-    return configs;
+  const [storeName, setStoreName] = useState(initialState.storeName);
+  const [config, setConfig] = useState(initialState.config);
+  const [viewMode, setViewMode] = useState(initialState.viewMode);
+  const [theme, setTheme] = useState(() => {
+    if (initialState.theme) return initialState.theme;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
-
-  const [storeLocks, setStoreLocks] = useState(() => {
-    const locks = {};
-    stores.forEach(store => {
-      locks[store] = { ...DEFAULT_STORE_LOCK };
-    });
-    return locks;
-  });
-
-  const [theme, setTheme] = useState('light');
-  const [viewMode, setViewMode] = useState('grid');
   const [showDollarAmount, setShowDollarAmount] = useState(false);
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: '' });
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showCopyToast, setShowCopyToast] = useState(false);
+  const [copyToastMessage, setCopyToastMessage] = useState('Copied!');
+  const [importModalState, setImportModalState] = useState({ open: false, pending: null, error: null, dragActive: false });
   const dropdownRef = useRef(null);
-  const lockButtonRef = useRef(null);
-  let longPressTimer;
+  const fileInputRef = useRef(null);
+
+  const hourRates = useMemo(() => Array.from({ length: 21 }, (_, i) => i), []);
+  const increments = useMemo(() => Array.from({ length: 10 }, (_, i) => i * 0.1), []);
 
   useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setTheme(prefersDark ? 'dark' : 'light');
-  }, []);
+    const timer = setTimeout(() => {
+      writeStateToURL({ storeName, config, viewMode, theme: initialState.theme ? theme : null });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [storeName, config, viewMode, theme, initialState.theme]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -648,105 +826,222 @@ function GridCalculator() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
+  const updateConfig = useCallback((patch) => {
+    setConfig((prev) => ({ ...prev, ...patch }));
+  }, []);
 
-  const toggleLock = () => {
-    setStoreLocks(prev => ({
-      ...prev,
-      [selectedStore]: {
-        isLocked: !prev[selectedStore].isLocked,
-        lockedAt: !prev[selectedStore].isLocked ? new Date().toISOString() : null
-      }
-    }));
+  const toggleTheme = () => {
+    setTheme((t) => (t === 'light' ? 'dark' : 'light'));
   };
 
-  const handleExportPDF = () => setShowExportMenu(false);
-  const handleExportExcel = () => setShowExportMenu(false);
+  const buildGridRows = () => hourRates.map((hourRate) => [
+    hourRate.toFixed(1),
+    ...increments.map((inc) => calculateValue(hourRate + inc, config).toFixed(2))
+  ]);
 
-  const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleString() : '';
+  const handleExportPDF = () => {
+    setShowExportMenu(false);
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 40;
+    const footerY = pageHeight - 24;
+    const usableWidth = pageWidth - marginX * 2;
+    const firstColWidth = 60;
+    const dataColWidth = (usableWidth - firstColWidth) / increments.length;
 
-  const hourRates = Array.from({ length: 21 }, (_, i) => i);
-  const increments = Array.from({ length: 10 }, (_, i) => i * 0.1);
+    doc.setFontSize(16);
+    doc.text(buildExcelTitle(storeName), marginX, 40);
+    doc.setFontSize(10);
+    doc.text(`Exported ${new Date().toLocaleString()}`, marginX, 58);
 
-  const calculateValue = (totalHours, config = DEFAULT_STORE_CONFIG) => {
-    const { baseRate, multiplier, mode, peakHours, q, capType, maxELR } = config;
-    const numBaseRate = Number(baseRate) || 150;
-    const p = Number(multiplier) || 0;
-    const numMultiplier = 1 + (p / 1000);
-    let effectivePeakHours;
+    const columnStyles = {
+      0: { halign: 'center', fontStyle: 'bold', cellWidth: firstColWidth }
+    };
+    increments.forEach((_, i) => {
+      columnStyles[i + 1] = { halign: 'right', cellWidth: dataColWidth };
+    });
 
-    if (mode === 'infinity') {
-      effectivePeakHours = Infinity;
-    } else if (capType === 'hours') {
-      effectivePeakHours = Number(peakHours) || Infinity;
-    } else if (capType === 'elr') {
-      const numMaxELR = Number(maxELR) || Infinity;
-      if (p > 0) {
-        const a = p / 100;
-        const targetScalingFactor = numMaxELR / numBaseRate;
-        effectivePeakHours = targetScalingFactor > 1 ? 1 + (targetScalingFactor - 1) / a : 1.0;
-      } else {
-        effectivePeakHours = Infinity;
-      }
-    } else {
-      effectivePeakHours = Infinity;
-    }
+    autoTable(doc, {
+      startY: 74,
+      margin: { left: marginX, right: marginX, bottom: 50 },
+      head: [['Labor Time', ...increments.map((inc) => inc.toFixed(1))]],
+      body: buildGridRows(),
+      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [68, 114, 196], halign: 'center', textColor: 255 },
+      columnStyles
+    });
 
-    const numQ = Number(q) || 0;
+    const paramLine = buildParameterRows(config, storeName)
+      .filter(([k, v]) => !(k === 'Store Name' && !v))
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('   |   ');
+    doc.setFontSize(8);
+    doc.setTextColor(90);
+    doc.text(paramLine, pageWidth / 2, footerY, { align: 'center', maxWidth: usableWidth });
 
-    if (totalHours <= 0) return 0;
-
-    const k = Math.round(totalHours * 10);
-    let cellsPastOne = Math.max(0, k - 10);
-    let scalingFactor = 1;
-
-    if (mode === 'infinity') {
-      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-    } else if (mode === 'hoursCap') {
-      const peakCells = Math.round(effectivePeakHours * 10) - 10;
-      cellsPastOne = Math.min(cellsPastOne, peakCells);
-      scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-    } else if (mode === 'mirror') {
-      const peakCells = Math.round(effectivePeakHours * 10) - 10;
-      if (totalHours <= effectivePeakHours) {
-        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-      } else {
-        const cellsPastPeak = k - Math.round(effectivePeakHours * 10);
-        const mirroredCells = peakCells - cellsPastPeak;
-        cellsPastOne = Math.max(0, mirroredCells);
-        scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-      }
-    } else if (mode === 'proportional') {
-      const peakCells = Math.max(0, Math.round(effectivePeakHours * 10) - 10);
-      if (config.q === '') {
-        const effectiveCellsPastOne = Math.min(cellsPastOne, peakCells);
-        scalingFactor = 1 + (numMultiplier - 1) * effectiveCellsPastOne;
-      } else {
-        const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-        if (totalHours <= effectivePeakHours) {
-          scalingFactor = 1 + (numMultiplier - 1) * cellsPastOne;
-        } else if (totalHours <= numQ && numQ > effectivePeakHours) {
-          const decreaseFactor = (totalHours - effectivePeakHours) / (numQ - effectivePeakHours);
-          scalingFactor = peakScalingFactor - (peakScalingFactor - 1) * decreaseFactor;
-        } else {
-          scalingFactor = 1;
-        }
-      }
-    }
-
-    let totalAmount = numBaseRate * scalingFactor * totalHours;
-
-    if (mode === 'hoursCap' && totalHours > effectivePeakHours) {
-      const peakCells = Math.round(effectivePeakHours * 10) - 10;
-      const peakScalingFactor = 1 + (numMultiplier - 1) * peakCells;
-      const peakAmount = numBaseRate * peakScalingFactor * effectivePeakHours;
-      totalAmount = peakAmount + (totalHours - effectivePeakHours) * numBaseRate * peakScalingFactor;
-    }
-
-    return Number(totalAmount.toFixed(2));
+    doc.save(buildFilename(storeName, 'pdf'));
   };
 
-  const generateGraphData = (config) => {
+  const handleExportExcel = () => {
+    setShowExportMenu(false);
+
+    const HEADER_FILL = '4472C4';
+    const HEADER_TEXT = 'FFFFFF';
+    const ALT_ROW_FILL = 'D9E1F2';
+    const BORDER_COLOR = 'B4B4B4';
+
+    const thinBorder = { style: 'thin', color: { rgb: BORDER_COLOR } };
+    const cellBorders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+
+    const titleStyle = {
+      font: { bold: true, sz: 16, color: { rgb: '1F2937' } },
+      alignment: { horizontal: 'left', vertical: 'center' },
+      fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } }
+    };
+
+    const headerStyle = {
+      fill: { patternType: 'solid', fgColor: { rgb: HEADER_FILL } },
+      font: { color: { rgb: HEADER_TEXT }, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: cellBorders
+    };
+
+    const titleText = buildExcelTitle(storeName);
+
+    // Grid sheet
+    const gridHeader = ['Labor Time', ...increments.map((inc) => Number(inc.toFixed(1)))];
+    const gridData = hourRates.map((hourRate) => [
+      Number(hourRate.toFixed(1)),
+      ...increments.map((inc) => calculateValue(hourRate + inc, config))
+    ]);
+    const gridAoa = [[titleText], gridHeader, ...gridData];
+    const gridSheet = XLSX.utils.aoa_to_sheet(gridAoa);
+    gridSheet['!cols'] = [{ wch: 12 }, ...increments.map(() => ({ wch: 10 }))];
+    gridSheet['!rows'] = [{ hpx: 40 }, { hpx: 30 }];
+    gridSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: gridHeader.length - 1 } }];
+
+    const titleCell = gridSheet[XLSX.utils.encode_cell({ r: 0, c: 0 })];
+    if (titleCell) titleCell.s = titleStyle;
+
+    for (let c = 0; c < gridHeader.length; c++) {
+      const cell = gridSheet[XLSX.utils.encode_cell({ r: 1, c })];
+      if (cell) cell.s = headerStyle;
+    }
+
+    for (let r = 2; r < gridAoa.length; r++) {
+      for (let c = 0; c < gridHeader.length; c++) {
+        const cell = gridSheet[XLSX.utils.encode_cell({ r, c })];
+        if (!cell) continue;
+        const fill = (r - 2) % 2 === 0
+          ? { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } }
+          : { patternType: 'solid', fgColor: { rgb: ALT_ROW_FILL } };
+        cell.s = {
+          fill,
+          alignment: { horizontal: c === 0 ? 'center' : 'right', vertical: 'center' },
+          font: c === 0 ? { bold: true } : undefined,
+          border: cellBorders
+        };
+        if (typeof cell.v === 'number' && c > 0) cell.z = '0.00';
+      }
+    }
+
+    // Parameters sheet
+    const paramRows = buildParameterRows(config, storeName);
+    const paramAoa = [[titleText], ['Parameter', 'Value'], ...paramRows];
+    const paramSheet = XLSX.utils.aoa_to_sheet(paramAoa);
+    paramSheet['!cols'] = [{ wch: 22 }, { wch: 28 }];
+    paramSheet['!rows'] = [{ hpx: 40 }, { hpx: 30 }];
+    paramSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+
+    const paramTitleCell = paramSheet[XLSX.utils.encode_cell({ r: 0, c: 0 })];
+    if (paramTitleCell) paramTitleCell.s = titleStyle;
+
+    for (let c = 0; c < 2; c++) {
+      const cell = paramSheet[XLSX.utils.encode_cell({ r: 1, c })];
+      if (cell) cell.s = headerStyle;
+    }
+
+    for (let r = 2; r < paramAoa.length; r++) {
+      for (let c = 0; c < 2; c++) {
+        const cell = paramSheet[XLSX.utils.encode_cell({ r, c })];
+        if (!cell) continue;
+        const fill = (r - 2) % 2 === 0
+          ? { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } }
+          : { patternType: 'solid', fgColor: { rgb: ALT_ROW_FILL } };
+        cell.s = {
+          fill,
+          alignment: { horizontal: 'left', vertical: 'center' },
+          font: c === 0 ? { bold: true } : undefined,
+          border: cellBorders
+        };
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, gridSheet, 'Grid');
+    XLSX.utils.book_append_sheet(wb, paramSheet, 'Parameters');
+    XLSX.writeFile(wb, buildFilename(storeName, 'xlsx'));
+  };
+
+  const openImportModal = () => {
+    setShowExportMenu(false);
+    setImportModalState({ open: true, pending: null, error: null, dragActive: false });
+  };
+
+  const closeImportModal = () => {
+    setImportModalState({ open: false, pending: null, error: null, dragActive: false });
+  };
+
+  const processImportFile = async (file) => {
+    if (!file) return;
+    if (!/\.xlsx$/i.test(file.name)) {
+      setImportModalState((s) => ({ ...s, error: 'Please select an .xlsx file.', dragActive: false }));
+      return;
+    }
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: 'array' });
+      const parsed = parseImportedWorkbook(wb);
+      setImportModalState({ open: true, pending: parsed, error: null, dragActive: false });
+    } catch (err) {
+      setImportModalState((s) => ({ ...s, pending: null, error: err.message || 'Could not read file.', dragActive: false }));
+    }
+  };
+
+  const applyImport = () => {
+    const pending = importModalState.pending;
+    if (!pending) return;
+    setStoreName(pending.storeName);
+    setConfig(pending.config);
+    closeImportModal();
+    triggerToast('Imported!');
+  };
+
+  const handleFileInputChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) processImportFile(file);
+    e.target.value = '';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    setImportModalState((s) => ({ ...s, dragActive: false }));
+    if (file) processImportFile(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setImportModalState((s) => (s.dragActive ? s : { ...s, dragActive: true }));
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setImportModalState((s) => ({ ...s, dragActive: false }));
+  };
+
+  const graphData = useMemo(() => {
     const data = [];
     hourRates.forEach((hourRate) => {
       increments.forEach((inc) => {
@@ -759,13 +1054,11 @@ function GridCalculator() {
       });
     });
     return data.sort((a, b) => a.hours - b.hours);
-  };
-
-  const graphData = useMemo(() => generateGraphData(storeConfigs[selectedStore]), [selectedStore, storeConfigs]);
+  }, [config, hourRates, increments]);
 
   const handleMouseEnter = (e, hourRate, inc) => {
     const totalHours = hourRate + inc;
-    const totalAmount = calculateValue(totalHours, storeConfigs[selectedStore]);
+    const totalAmount = calculateValue(totalHours, config);
     const elr = totalHours > 0 ? (totalAmount / totalHours).toFixed(2) : 'N/A';
     const rect = e.target.getBoundingClientRect();
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -780,57 +1073,37 @@ function GridCalculator() {
 
   const handleMouseLeave = () => setTooltip({ show: false, x: 0, y: 0, content: '' });
 
-  const handleTouchStart = () => {
-    longPressTimer = setTimeout(() => {
-      if (lockButtonRef.current) {
-        const rect = lockButtonRef.current.getBoundingClientRect();
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-        setTooltip({
-          show: true,
-          x: rect.left + rect.width / 2 + scrollLeft,
-          y: rect.top - 10 + scrollTop,
-          content: storeLocks[selectedStore].isLocked ? `Locked at: ${formatDate(storeLocks[selectedStore].lockedAt)}` : 'Unlocked'
-        });
-      }
-    }, 500);
-  };
-
-  const handleTouchEnd = () => {
-    clearTimeout(longPressTimer);
-    setTooltip({ show: false, x: 0, y: 0, content: '' });
-  };
-
-  const numInputHours = Number(storeConfigs[selectedStore]?.inputHours || '');
+  const numInputHours = Number(config.inputHours || '');
   let totalAmount = 0;
   if (!isNaN(numInputHours) && numInputHours >= 0) {
-    totalAmount = calculateValue(numInputHours, storeConfigs[selectedStore]);
+    totalAmount = calculateValue(numInputHours, config);
   }
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text)
       .then(() => console.log(`Copied: ${text}`))
-      .catch(err => console.error('Failed to copy: ', err));
+      .catch(() => triggerToast('Failed to copy'));
   };
 
-  const handleCopyTotalAmount = () => {
-    copyToClipboard(totalAmount.toFixed(2));
-    triggerCopyToast();
-  };
-
-  const handleGridCellClick = (value) => {
-    copyToClipboard(value.toString());
-    triggerCopyToast();
-  };
-
-  const triggerCopyToast = () => {
+  const triggerToast = (message = 'Copied!') => {
+    setCopyToastMessage(message);
     setShowCopyToast(true);
     setTimeout(() => setShowCopyToast(false), 1500);
   };
 
+  const handleCopyTotalAmount = () => {
+    copyToClipboard(totalAmount.toFixed(2));
+    triggerToast();
+  };
+
+  const handleGridCellClick = (value) => {
+    copyToClipboard(value.toString());
+    triggerToast();
+  };
+
   const onCopyValue = (value) => {
     copyToClipboard(value);
-    triggerCopyToast();
+    triggerToast();
   };
 
   const modes = [
@@ -840,14 +1113,18 @@ function GridCalculator() {
     { name: 'proportional', icon: RiCrosshair2Fill }
   ];
 
-  const isLocked = storeLocks[selectedStore]?.isLocked || false;
-
   return (
     <ThemeProvider theme={theme === 'light' ? lightTheme : darkTheme}>
       <AppContainer>
         <Header>
           <Title>Labor Rate Matrix</Title>
-          <StoreDropdown selectedStore={selectedStore} setSelectedStore={setSelectedStore} storeLocks={storeLocks} />
+          <StoreNameInput
+            type="text"
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="Store name (optional)"
+            aria-label="Store name"
+          />
           <ButtonGroup>
             <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
               <RiLineChartLine size={24} />
@@ -858,30 +1135,24 @@ function GridCalculator() {
             <IconButton onClick={() => setViewMode('calculator')} active={viewMode === 'calculator'}>
               <RiFlashlightLine size={24} />
             </IconButton>
-            <IconButton
-              ref={lockButtonRef}
-              onClick={toggleLock}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-              isLockButton={true}
-              isLocked={isLocked}
-              title={isLocked ? `Locked at: ${formatDate(storeLocks[selectedStore]?.lockedAt)}` : ''}
-            >
-              {isLocked ? <RiLockLine size={24} /> : <RiLockUnlockLine size={24} />}
-            </IconButton>
-            <ExportDropdown ref={dropdownRef}>
-              <IconButton onClick={() => setShowExportMenu(!showExportMenu)}>
-                <RiUploadLine size={24} />
-              </IconButton>
-              <ExportMenu show={showExportMenu}>
-                <ExportOption onClick={handleExportPDF}>
-                  <RiFilePdfLine size={24} />
-                </ExportOption>
-                <ExportOption onClick={handleExportExcel}>
-                  <RiFileExcel2Line size={24} />
-                </ExportOption>
-              </ExportMenu>
-            </ExportDropdown>
+            {viewMode === 'grid' && (
+              <ExportDropdown ref={dropdownRef}>
+                <IconButton onClick={() => setShowExportMenu(!showExportMenu)} title="Export / Import">
+                  <RiUploadLine size={24} />
+                </IconButton>
+                <ExportMenu show={showExportMenu}>
+                  <ExportOption onClick={handleExportPDF} title="Export PDF">
+                    <RiFilePdfLine size={24} />
+                  </ExportOption>
+                  <ExportOption onClick={handleExportExcel} title="Export Excel">
+                    <RiFileExcel2Line size={24} />
+                  </ExportOption>
+                  <ExportOption onClick={openImportModal} title="Import Excel">
+                    <RiDownloadLine size={24} />
+                  </ExportOption>
+                </ExportMenu>
+              </ExportDropdown>
+            )}
             <IconButton onClick={toggleTheme}>
               {theme === 'light' ? <RiSunLine size={24} /> : <RiMoonLine size={24} />}
             </IconButton>
@@ -894,129 +1165,101 @@ function GridCalculator() {
                 <Label>Base Rate</Label>
                 <Input
                   type="number"
-                  value={storeConfigs[selectedStore]?.baseRate}
-                  onChange={(e) => setStoreConfigs(prev => ({
-                    ...prev,
-                    [selectedStore]: { ...prev[selectedStore], baseRate: e.target.value }
-                  }))}
-                  disabled={isLocked}
+                  value={config.baseRate}
+                  onChange={(e) => updateConfig({ baseRate: e.target.value })}
                   placeholder="150"
                 />
               </InputWrapper>
-              {!isLocked && (
-                <>
-                  <InputWrapper>
-                    <Label>Increase / Hr</Label>
-                    <PercentageInputWrapper>
-                      <PercentageInput
-                        type="number"
-                        value={storeConfigs[selectedStore].multiplier}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === '' || Number(value) >= 0) {
-                            setStoreConfigs(prev => ({
-                              ...prev,
-                              [selectedStore]: { ...prev[selectedStore], multiplier: value }
-                            }));
-                          }
-                        }}
-                        step="0.1"
-                        min="0"
-                        placeholder="e.g., 2"
-                        disabled={isLocked}
-                      />
-                      <PercentageSymbol>%</PercentageSymbol>
-                    </PercentageInputWrapper>
+              <InputWrapper>
+                <Label>Increase / Hr</Label>
+                <PercentageInputWrapper>
+                  <PercentageInput
+                    type="number"
+                    value={config.multiplier}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '' || Number(value) >= 0) {
+                        updateConfig({ multiplier: value });
+                      }
+                    }}
+                    step="0.1"
+                    min="0"
+                    placeholder="e.g., 2"
+                  />
+                  <PercentageSymbol>%</PercentageSymbol>
+                </PercentageInputWrapper>
+              </InputWrapper>
+              {config.mode !== 'infinity' && config.capType === 'hours' && (
+                <FadeWrapper show={true}>
+                  <InputWrapper key="peakHours">
+                    <Label>Peak Hours</Label>
+                    <Input
+                      type="number"
+                      value={config.peakHours ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '' || (Number(value) >= 0 && !isNaN(Number(value)))) {
+                          updateConfig({ peakHours: value });
+                        }
+                      }}
+                      step="0.1"
+                      min="1"
+                      placeholder="Hour Limit"
+                    />
                   </InputWrapper>
-                  {storeConfigs[selectedStore].mode !== 'infinity' && storeConfigs[selectedStore].capType === 'hours' && (
-                    <FadeWrapper show={true}>
-                      <InputWrapper key="peakHours">
-                        <Label>Peak Hours</Label>
-                        <Input
-                          type="number"
-                          value={storeConfigs[selectedStore]?.peakHours ?? ''}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === '' || (Number(value) >= 0 && !isNaN(Number(value)))) {
-                              setStoreConfigs(prev => ({
-                                ...prev,
-                                [selectedStore]: { ...prev[selectedStore], peakHours: value }
-                              }));
-                            }
-                          }}
-                          step="0.1"
-                          min="1"
-                          placeholder="Hour Limit"
-                        />
-                      </InputWrapper>
-                    </FadeWrapper>
-                  )}
-                  {storeConfigs[selectedStore].mode !== 'infinity' && storeConfigs[selectedStore].capType === 'elr' && (
-                    <FadeWrapper show={true}>
-                      <InputWrapper key="maxELR">
-                        <Label>Max ELR</Label>
-                        <Input
-                          type="number"
-                          value={storeConfigs[selectedStore]?.maxELR ?? ''}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === '' || (Number(value) >= 0 && !isNaN(Number(value)))) {
-                              setStoreConfigs(prev => ({
-                                ...prev,
-                                [selectedStore]: { ...prev[selectedStore], maxELR: value }
-                              }));
-                            }
-                          }}
-                          step="0.1"
-                          min="0"
-                          placeholder="Max ELR"
-                        />
-                      </InputWrapper>
-                    </FadeWrapper>
-                  )}
-                  {storeConfigs[selectedStore].mode === 'proportional' && (
-                    <FadeWrapper show={true}>
-                      <InputWrapper key="endHours">
-                        <Label>End Hours</Label>
-                        <Input
-                          type="number"
-                          value={storeConfigs[selectedStore].q}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setStoreConfigs(prev => ({
-                              ...prev,
-                              [selectedStore]: { ...prev[selectedStore], q: value }
-                            }));
-                          }}
-                          step="0.1"
-                          min={Number(storeConfigs[selectedStore]?.peakHours) + 0.1 || 0.1}
-                          placeholder="End Hours"
-                        />
-                      </InputWrapper>
-                    </FadeWrapper>
-                  )}
-                </>
+                </FadeWrapper>
+              )}
+              {config.mode !== 'infinity' && config.capType === 'elr' && (
+                <FadeWrapper show={true}>
+                  <InputWrapper key="maxELR">
+                    <Label>Max ELR</Label>
+                    <Input
+                      type="number"
+                      value={config.maxELR ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '' || (Number(value) >= 0 && !isNaN(Number(value)))) {
+                          updateConfig({ maxELR: value });
+                        }
+                      }}
+                      step="0.1"
+                      min="0"
+                      placeholder="Max ELR"
+                    />
+                  </InputWrapper>
+                </FadeWrapper>
+              )}
+              {config.mode === 'proportional' && (
+                <FadeWrapper show={true}>
+                  <InputWrapper key="endHours">
+                    <Label>End Hours</Label>
+                    <Input
+                      type="number"
+                      value={config.q}
+                      onChange={(e) => updateConfig({ q: e.target.value })}
+                      step="0.1"
+                      min={Number(config.peakHours) + 0.1 || 0.1}
+                      placeholder="End Hours"
+                    />
+                  </InputWrapper>
+                </FadeWrapper>
               )}
               {viewMode === 'calculator' && (
                 <InputWrapper key="enterHours">
                   <Label>Enter Hours</Label>
                   <Input
                     type="number"
-                    value={storeConfigs[selectedStore]?.inputHours || DEFAULT_STORE_CONFIG.inputHours}
+                    value={config.inputHours || ''}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (value === '' || Number(value) >= 0) {
-                        setStoreConfigs(prev => ({
-                          ...prev,
-                          [selectedStore]: { ...prev[selectedStore], inputHours: value }
-                        }));
+                        updateConfig({ inputHours: value });
                       }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        const inputHours = storeConfigs[selectedStore]?.inputHours;
-                        if (inputHours && !isNaN(Number(inputHours)) && Number(inputHours) >= 0) {
+                        if (config.inputHours && !isNaN(Number(config.inputHours)) && Number(config.inputHours) >= 0) {
                           handleCopyTotalAmount();
                         }
                       }
@@ -1038,23 +1281,21 @@ function GridCalculator() {
                     <RiExchangeDollarLine size={24} />
                   </GraphSwitchButton>
                 )}
-                {storeConfigs[selectedStore].mode !== 'infinity' && (
+                {config.mode !== 'infinity' && (
                   <ModeSwitches>
                     <ModeLabel>Cap Type</ModeLabel>
                     <SwitchPanel>
                       <ModeButtons>
                         <IconButton
-                          onClick={() => !isLocked && setStoreConfigs(prev => ({ ...prev, [selectedStore]: { ...prev[selectedStore], capType: 'hours' } }))}
-                          active={storeConfigs[selectedStore].capType === 'hours'}
-                          disabled={isLocked}
+                          onClick={() => updateConfig({ capType: 'hours' })}
+                          active={config.capType === 'hours'}
                           title="Cap by Hours"
                         >
                           <RiTimeLine size={24} />
                         </IconButton>
                         <IconButton
-                          onClick={() => !isLocked && setStoreConfigs(prev => ({ ...prev, [selectedStore]: { ...prev[selectedStore], capType: 'elr' } }))}
-                          active={storeConfigs[selectedStore].capType === 'elr'}
-                          disabled={isLocked}
+                          onClick={() => updateConfig({ capType: 'elr' })}
+                          active={config.capType === 'elr'}
                           title="Cap by ELR"
                         >
                           <RiMoneyDollarBoxFill size={24} />
@@ -1070,9 +1311,8 @@ function GridCalculator() {
                       {modes.map((mode) => (
                         <IconButton
                           key={mode.name}
-                          onClick={() => !isLocked && setStoreConfigs(prev => ({ ...prev, [selectedStore]: { ...prev[selectedStore], mode: mode.name } }))}
-                          active={storeConfigs[selectedStore].mode === mode.name}
-                          disabled={isLocked}
+                          onClick={() => updateConfig({ mode: mode.name })}
+                          active={config.mode === mode.name}
                           title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
                         >
                           <mode.icon size={24} />
@@ -1087,14 +1327,14 @@ function GridCalculator() {
           {viewMode === 'graph' ? (
             <Graph
               data={graphData}
-              baseRate={storeConfigs[selectedStore]?.baseRate || '150'}
+              baseRate={config.baseRate || '150'}
               showDollarAmount={showDollarAmount}
               theme={theme}
               onCopyValue={onCopyValue}
             />
           ) : viewMode === 'calculator' ? (
             <CalculatorContainer>
-              {storeConfigs[selectedStore]?.inputHours && !isNaN(numInputHours) && numInputHours >= 0 && (
+              {config.inputHours && !isNaN(numInputHours) && numInputHours >= 0 && (
                 <ResultContainer>
                   <ResultText>Total Amount: ${totalAmount.toFixed(2)}</ResultText>
                   <CopyButton onClick={handleCopyTotalAmount} title="Copy Total Amount">
@@ -1120,7 +1360,7 @@ function GridCalculator() {
                       <Td isFirstColumn>{hourRate.toFixed(1)}</Td>
                       {increments.map((inc) => {
                         const totalHours = hourRate + inc;
-                        const value = calculateValue(totalHours, storeConfigs[selectedStore]).toFixed(2);
+                        const value = calculateValue(totalHours, config).toFixed(2);
                         return (
                           <Td
                             key={inc}
@@ -1140,10 +1380,56 @@ function GridCalculator() {
             </TableContainer>
           )}
         </Card>
+        {importModalState.open && (
+          <ModalOverlay onClick={closeImportModal}>
+            <Modal onClick={(e) => e.stopPropagation()}>
+              <ModalHeader>
+                <ModalTitle>
+                  {importModalState.pending ? 'Confirm import' : 'Import from Excel'}
+                </ModalTitle>
+                <ModalCloseButton onClick={closeImportModal} aria-label="Close">
+                  <RiCloseLine size={22} />
+                </ModalCloseButton>
+              </ModalHeader>
+              {importModalState.pending ? (
+                <>
+                  <ModalMessage>
+                    This will replace the current grid with values from the uploaded file. Continue?
+                  </ModalMessage>
+                  <ModalActions>
+                    <ModalButton onClick={closeImportModal}>Cancel</ModalButton>
+                    <ModalButton primary onClick={applyImport}>Replace</ModalButton>
+                  </ModalActions>
+                </>
+              ) : (
+                <>
+                  <DropZone
+                    active={importModalState.dragActive}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <DropZoneText>Drag &amp; drop a Labor Rate Matrix .xlsx here</DropZoneText>
+                    <DropZoneSubtext>or click to choose a file</DropZoneSubtext>
+                  </DropZone>
+                  <HiddenFileInput
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx"
+                    onChange={handleFileInputChange}
+                  />
+                  {importModalState.error && <ModalError>{importModalState.error}</ModalError>}
+                </>
+              )}
+            </Modal>
+          </ModalOverlay>
+        )}
         <Tooltip show={tooltip.show} x={tooltip.x} y={tooltip.y}>
           {tooltip.content}
         </Tooltip>
-        <CopyToast show={showCopyToast}>Copied!</CopyToast>
+        <VersionLabel>v{version}</VersionLabel>
+        <CopyToast show={showCopyToast}>{copyToastMessage}</CopyToast>
       </AppContainer>
     </ThemeProvider>
   );
