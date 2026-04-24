@@ -4,6 +4,7 @@ import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLi
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx-js-style';
+import { version } from '../../package.json';
 import Graph from './Graph';
 
 const MODE_LABELS = {
@@ -755,6 +756,14 @@ const CopyToast = styled.div`
   pointer-events: none;
 `;
 
+const VersionLabel = styled.div`
+  font-size: 12px;
+  color: ${({ theme }) => theme.text};
+  opacity: 0.4;
+  margin-top: 16px;
+  text-align: center;
+`;
+
 // FadeWrapper Component
 const FadeWrapper = ({ show, children }) => {
   const [shouldRender, setShouldRender] = useState(show);
@@ -1417,6 +1426,7 @@ function GridCalculator() {
         <Tooltip show={tooltip.show} x={tooltip.x} y={tooltip.y}>
           {tooltip.content}
         </Tooltip>
+        <VersionLabel>v{version}</VersionLabel>
         <CopyToast show={showCopyToast}>{copyToastMessage}</CopyToast>
       </AppContainer>
     </ThemeProvider>
