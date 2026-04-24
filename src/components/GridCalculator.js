@@ -5,6 +5,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx-js-style';
 import pkg from '../../package.json';
+import { TOOLTIPS } from '../content/tooltips';
 import Graph from './Graph';
 
 const { version } = pkg;
@@ -708,6 +709,45 @@ const Tooltip = styled.div`
   white-space: pre-line;
 `;
 
+const FieldTooltipWrapper = styled.div`
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+`;
+
+const FieldTooltipBubble = styled.div`
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: ${({ theme }) => theme.tooltipBg};
+  color: ${({ theme }) => theme.tooltipText};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  width: 220px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1500;
+  pointer-events: none;
+  white-space: normal;
+`;
+
+const InfoIconButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.text};
+  opacity: 0.4;
+  padding: 0 0 0 4px;
+  font-size: 13px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  &:hover { opacity: 0.9; }
+`;
+
 const CalculatorContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -765,6 +805,26 @@ const VersionLabel = styled.div`
   margin-top: 16px;
   text-align: center;
 `;
+
+// FieldTooltip Component
+const FieldTooltip = ({ text }) => {
+  const [visible, setVisible] = useState(false);
+  return (
+    <FieldTooltipWrapper>
+      <InfoIconButton
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        tabIndex={0}
+        aria-label="More information"
+      >
+        ⓘ
+      </InfoIconButton>
+      {visible && <FieldTooltipBubble>{text}</FieldTooltipBubble>}
+    </FieldTooltipWrapper>
+  );
+};
 
 // FadeWrapper Component
 const FadeWrapper = ({ show, children }) => {
@@ -880,7 +940,8 @@ function GridCalculator() {
     doc.setTextColor(90);
     doc.text(paramLine, pageWidth / 2, footerY, { align: 'center', maxWidth: usableWidth });
 
-    doc.save(buildFilename(storeName, 'pdf'));
+    const pdfUrl = doc.output('bloburl');
+    window.open(pdfUrl, '_blank');
   };
 
   const handleExportExcel = () => {
@@ -1107,10 +1168,10 @@ function GridCalculator() {
   };
 
   const modes = [
-    { name: 'infinity', icon: RiInfinityLine },
-    { name: 'hoursCap', icon: RiAlignTop },
-    { name: 'mirror', icon: RiTentFill },
-    { name: 'proportional', icon: RiCrosshair2Fill }
+    { name: 'infinity', icon: RiInfinityLine, tooltip: TOOLTIPS.modeInfinity },
+    { name: 'hoursCap', icon: RiAlignTop, tooltip: TOOLTIPS.modeHoursCap },
+    { name: 'mirror', icon: RiTentFill, tooltip: TOOLTIPS.modeMirror },
+    { name: 'proportional', icon: RiCrosshair2Fill, tooltip: TOOLTIPS.modeProportional }
   ];
 
   return (
@@ -1162,7 +1223,7 @@ function GridCalculator() {
           <InputsContainer>
             <LeftInputs>
               <InputWrapper>
-                <Label>Base Rate</Label>
+                <Label>Base Rate <FieldTooltip text={TOOLTIPS.baseRate} /></Label>
                 <Input
                   type="number"
                   value={config.baseRate}
@@ -1171,7 +1232,7 @@ function GridCalculator() {
                 />
               </InputWrapper>
               <InputWrapper>
-                <Label>Increase / Hr</Label>
+                <Label>Increase / Hr <FieldTooltip text={TOOLTIPS.multiplier} /></Label>
                 <PercentageInputWrapper>
                   <PercentageInput
                     type="number"
@@ -1192,7 +1253,7 @@ function GridCalculator() {
               {config.mode !== 'infinity' && config.capType === 'hours' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="peakHours">
-                    <Label>Peak Hours</Label>
+                    <Label>Peak Hours <FieldTooltip text={TOOLTIPS.peakHours} /></Label>
                     <Input
                       type="number"
                       value={config.peakHours ?? ''}
@@ -1212,7 +1273,7 @@ function GridCalculator() {
               {config.mode !== 'infinity' && config.capType === 'elr' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="maxELR">
-                    <Label>Max ELR</Label>
+                    <Label>Max ELR <FieldTooltip text={TOOLTIPS.maxELR} /></Label>
                     <Input
                       type="number"
                       value={config.maxELR ?? ''}
@@ -1232,7 +1293,7 @@ function GridCalculator() {
               {config.mode === 'proportional' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="endHours">
-                    <Label>End Hours</Label>
+                    <Label>End Hours <FieldTooltip text={TOOLTIPS.endHours} /></Label>
                     <Input
                       type="number"
                       value={config.q}
@@ -1246,7 +1307,7 @@ function GridCalculator() {
               )}
               {viewMode === 'calculator' && (
                 <InputWrapper key="enterHours">
-                  <Label>Enter Hours</Label>
+                  <Label>Enter Hours <FieldTooltip text={TOOLTIPS.enterHours} /></Label>
                   <Input
                     type="number"
                     value={config.inputHours || ''}
@@ -1283,20 +1344,20 @@ function GridCalculator() {
                 )}
                 {config.mode !== 'infinity' && (
                   <ModeSwitches>
-                    <ModeLabel>Cap Type</ModeLabel>
+                    <ModeLabel>Cap Type <FieldTooltip text={config.capType === 'hours' ? TOOLTIPS.capTypeHours : TOOLTIPS.capTypeELR} /></ModeLabel>
                     <SwitchPanel>
                       <ModeButtons>
                         <IconButton
                           onClick={() => updateConfig({ capType: 'hours' })}
                           active={config.capType === 'hours'}
-                          title="Cap by Hours"
+                          title={TOOLTIPS.capTypeHours}
                         >
                           <RiTimeLine size={24} />
                         </IconButton>
                         <IconButton
                           onClick={() => updateConfig({ capType: 'elr' })}
                           active={config.capType === 'elr'}
-                          title="Cap by ELR"
+                          title={TOOLTIPS.capTypeELR}
                         >
                           <RiMoneyDollarBoxFill size={24} />
                         </IconButton>
@@ -1305,7 +1366,7 @@ function GridCalculator() {
                   </ModeSwitches>
                 )}
                 <ModeSwitches>
-                  <ModeLabel>Grid Profile</ModeLabel>
+                  <ModeLabel>Grid Profile <FieldTooltip text={modes.find(m => m.name === config.mode)?.tooltip} /></ModeLabel>
                   <SwitchPanel>
                     <ModeButtons>
                       {modes.map((mode) => (
@@ -1313,7 +1374,7 @@ function GridCalculator() {
                           key={mode.name}
                           onClick={() => updateConfig({ mode: mode.name })}
                           active={config.mode === mode.name}
-                          title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
+                          title={mode.tooltip}
                         >
                           <mode.icon size={24} />
                         </IconButton>
