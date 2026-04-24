@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiFlashlightLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine, RiBarChartLine } from 'react-icons/ri';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx-js-style';
 import pkg from '../../package.json';
+import { TOOLTIPS } from '../content/tooltips';
 import Graph from './Graph';
 
 const { version } = pkg;
@@ -367,8 +369,6 @@ const IconButton = styled.button`
 const GraphSwitchButton = styled(IconButton)`
   position: relative;
   top: 28px;
-  background: none;
-  border: none;
 `;
 
 const ExportDropdown = styled.div`
@@ -708,6 +708,50 @@ const Tooltip = styled.div`
   white-space: pre-line;
 `;
 
+const HintAnchor = styled.span`
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+`;
+
+const LabelRow = styled.div`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+`;
+
+const HintBubble = styled.div`
+  position: fixed;
+  background-color: ${({ theme }) => theme.tooltipBg};
+  color: ${({ theme }) => theme.tooltipText};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  z-index: 1500;
+  pointer-events: none;
+  white-space: normal;
+`;
+
+const InfoIconButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.text};
+  opacity: 0.4;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  &:hover { opacity: 0.9; }
+`;
+
 const CalculatorContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -765,6 +809,73 @@ const VersionLabel = styled.div`
   margin-top: 16px;
   text-align: center;
 `;
+
+// HintTooltip — portal-rendered bubble that flips and clamps to stay in viewport
+const HintTooltip = ({ text, children }) => {
+  const anchorRef = useRef(null);
+  const bubbleRef = useRef(null);
+  const [hoverShown, setHoverShown] = useState(false);
+  const [focusShown, setFocusShown] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const visible = hoverShown || focusShown;
+
+  useLayoutEffect(() => {
+    if (!visible || !anchorRef.current || !bubbleRef.current) return;
+    // Measure the child (the actual button/icon), not the wrapper span.
+    // Children may use position:relative/top offsets that the wrapper's
+    // layout box doesn't account for, which would anchor the tooltip in
+    // the wrong place.
+    const target = anchorRef.current.firstElementChild || anchorRef.current;
+    const a = target.getBoundingClientRect();
+    const b = bubbleRef.current.getBoundingClientRect();
+    const margin = 8;
+    let top = a.top - b.height - margin;
+    if (top < margin) top = a.bottom + margin;
+    let left = a.left + a.width / 2 - b.width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - b.width - margin));
+    setCoords({ top, left });
+  }, [visible, text]);
+
+  const handleFocus = (e) => {
+    // Only show on keyboard focus — suppresses the tooltip hanging around
+    // after a mouse click on the wrapped button.
+    const target = e.target;
+    if (target && typeof target.matches === 'function' && target.matches(':focus-visible')) {
+      setFocusShown(true);
+    }
+  };
+
+  return (
+    <HintAnchor
+      ref={anchorRef}
+      onMouseEnter={() => setHoverShown(true)}
+      onMouseLeave={() => setHoverShown(false)}
+      onFocus={handleFocus}
+      onBlur={() => setFocusShown(false)}
+    >
+      {children}
+      {visible && createPortal(
+        <HintBubble
+          ref={bubbleRef}
+          role="tooltip"
+          style={coords
+            ? { top: coords.top, left: coords.left, visibility: 'visible' }
+            : { top: 0, left: 0, visibility: 'hidden' }}
+        >
+          {text}
+        </HintBubble>,
+        document.body
+      )}
+    </HintAnchor>
+  );
+};
+
+// InfoHint — the ⓘ affordance used beside input labels
+const InfoHint = ({ text }) => (
+  <HintTooltip text={text}>
+    <InfoIconButton type="button" aria-label="More information">ⓘ</InfoIconButton>
+  </HintTooltip>
+);
 
 // FadeWrapper Component
 const FadeWrapper = ({ show, children }) => {
@@ -880,7 +991,15 @@ function GridCalculator() {
     doc.setTextColor(90);
     doc.text(paramLine, pageWidth / 2, footerY, { align: 'center', maxWidth: usableWidth });
 
-    doc.save(buildFilename(storeName, 'pdf'));
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const preview = window.open(url, '_blank');
+    if (preview) {
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } else {
+      URL.revokeObjectURL(url);
+      doc.save(buildFilename(storeName, 'pdf'));
+    }
   };
 
   const handleExportExcel = () => {
@@ -1107,10 +1226,10 @@ function GridCalculator() {
   };
 
   const modes = [
-    { name: 'infinity', icon: RiInfinityLine },
-    { name: 'hoursCap', icon: RiAlignTop },
-    { name: 'mirror', icon: RiTentFill },
-    { name: 'proportional', icon: RiCrosshair2Fill }
+    { name: 'infinity', icon: RiInfinityLine, tooltip: TOOLTIPS.modeInfinity },
+    { name: 'hoursCap', icon: RiAlignTop, tooltip: TOOLTIPS.modeHoursCap },
+    { name: 'mirror', icon: RiTentFill, tooltip: TOOLTIPS.modeMirror },
+    { name: 'proportional', icon: RiCrosshair2Fill, tooltip: TOOLTIPS.modeProportional }
   ];
 
   return (
@@ -1126,15 +1245,6 @@ function GridCalculator() {
             aria-label="Store name"
           />
           <ButtonGroup>
-            <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
-              <RiLineChartLine size={24} />
-            </IconButton>
-            <IconButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
-              <RiTableLine size={24} />
-            </IconButton>
-            <IconButton onClick={() => setViewMode('calculator')} active={viewMode === 'calculator'}>
-              <RiFlashlightLine size={24} />
-            </IconButton>
             {viewMode === 'grid' && (
               <ExportDropdown ref={dropdownRef}>
                 <IconButton onClick={() => setShowExportMenu(!showExportMenu)} title="Export / Import">
@@ -1153,6 +1263,12 @@ function GridCalculator() {
                 </ExportMenu>
               </ExportDropdown>
             )}
+            <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
+              <RiLineChartLine size={24} />
+            </IconButton>
+            <IconButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
+              <RiTableLine size={24} />
+            </IconButton>
             <IconButton onClick={toggleTheme}>
               {theme === 'light' ? <RiSunLine size={24} /> : <RiMoonLine size={24} />}
             </IconButton>
@@ -1162,7 +1278,10 @@ function GridCalculator() {
           <InputsContainer>
             <LeftInputs>
               <InputWrapper>
-                <Label>Base Rate</Label>
+                <LabelRow>
+                  <Label>Base Rate</Label>
+                  <InfoHint text={TOOLTIPS.baseRate} />
+                </LabelRow>
                 <Input
                   type="number"
                   value={config.baseRate}
@@ -1171,7 +1290,10 @@ function GridCalculator() {
                 />
               </InputWrapper>
               <InputWrapper>
-                <Label>Increase / Hr</Label>
+                <LabelRow>
+                  <Label>Increase / Hr</Label>
+                  <InfoHint text={TOOLTIPS.multiplier} />
+                </LabelRow>
                 <PercentageInputWrapper>
                   <PercentageInput
                     type="number"
@@ -1192,7 +1314,10 @@ function GridCalculator() {
               {config.mode !== 'infinity' && config.capType === 'hours' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="peakHours">
-                    <Label>Peak Hours</Label>
+                    <LabelRow>
+                      <Label>Peak Hours</Label>
+                      <InfoHint text={TOOLTIPS.peakHours} />
+                    </LabelRow>
                     <Input
                       type="number"
                       value={config.peakHours ?? ''}
@@ -1212,7 +1337,10 @@ function GridCalculator() {
               {config.mode !== 'infinity' && config.capType === 'elr' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="maxELR">
-                    <Label>Max ELR</Label>
+                    <LabelRow>
+                      <Label>Max ELR</Label>
+                      <InfoHint text={TOOLTIPS.maxELR} />
+                    </LabelRow>
                     <Input
                       type="number"
                       value={config.maxELR ?? ''}
@@ -1232,7 +1360,10 @@ function GridCalculator() {
               {config.mode === 'proportional' && (
                 <FadeWrapper show={true}>
                   <InputWrapper key="endHours">
-                    <Label>End Hours</Label>
+                    <LabelRow>
+                      <Label>End Hours</Label>
+                      <InfoHint text={TOOLTIPS.endHours} />
+                    </LabelRow>
                     <Input
                       type="number"
                       value={config.q}
@@ -1246,7 +1377,10 @@ function GridCalculator() {
               )}
               {viewMode === 'calculator' && (
                 <InputWrapper key="enterHours">
-                  <Label>Enter Hours</Label>
+                  <LabelRow>
+                    <Label>Enter Hours</Label>
+                    <InfoHint text={TOOLTIPS.enterHours} />
+                  </LabelRow>
                   <Input
                     type="number"
                     value={config.inputHours || ''}
@@ -1274,49 +1408,68 @@ function GridCalculator() {
             <RightInputs>
               <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
                 {viewMode === 'graph' && (
-                  <GraphSwitchButton
-                    onClick={() => setShowDollarAmount(!showDollarAmount)}
-                    noHover={true}
-                  >
-                    <RiExchangeDollarLine size={24} />
-                  </GraphSwitchButton>
+                  <HintTooltip text={showDollarAmount ? TOOLTIPS.graphSwitchToELR : TOOLTIPS.graphSwitchToTotal}>
+                    <GraphSwitchButton
+                      onClick={() => setShowDollarAmount(!showDollarAmount)}
+                      aria-label={showDollarAmount ? 'Show ELR on graph' : 'Show Total sales on graph'}
+                    >
+                      {showDollarAmount
+                        ? <RiBarChartLine size={24} />
+                        : <RiExchangeDollarLine size={24} />}
+                    </GraphSwitchButton>
+                  </HintTooltip>
                 )}
                 {config.mode !== 'infinity' && (
                   <ModeSwitches>
-                    <ModeLabel>Cap Type</ModeLabel>
+                    <ModeLabel>
+                      <LabelRow>
+                        <span>Cap Type</span>
+                        <InfoHint text={TOOLTIPS.capType} />
+                      </LabelRow>
+                    </ModeLabel>
                     <SwitchPanel>
                       <ModeButtons>
-                        <IconButton
-                          onClick={() => updateConfig({ capType: 'hours' })}
-                          active={config.capType === 'hours'}
-                          title="Cap by Hours"
-                        >
-                          <RiTimeLine size={24} />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => updateConfig({ capType: 'elr' })}
-                          active={config.capType === 'elr'}
-                          title="Cap by ELR"
-                        >
-                          <RiMoneyDollarBoxFill size={24} />
-                        </IconButton>
+                        <HintTooltip text={TOOLTIPS.capTypeHours}>
+                          <IconButton
+                            onClick={() => updateConfig({ capType: 'hours' })}
+                            active={config.capType === 'hours'}
+                            aria-label="Cap by Hours"
+                          >
+                            <RiTimeLine size={24} />
+                          </IconButton>
+                        </HintTooltip>
+                        <HintTooltip text={TOOLTIPS.capTypeELR}>
+                          <IconButton
+                            onClick={() => updateConfig({ capType: 'elr' })}
+                            active={config.capType === 'elr'}
+                            aria-label="Cap by ELR"
+                          >
+                            <RiMoneyDollarBoxFill size={24} />
+                          </IconButton>
+                        </HintTooltip>
                       </ModeButtons>
                     </SwitchPanel>
                   </ModeSwitches>
                 )}
                 <ModeSwitches>
-                  <ModeLabel>Grid Profile</ModeLabel>
+                  <ModeLabel>
+                    <LabelRow>
+                      <span>Grid Profile</span>
+                      <InfoHint text={TOOLTIPS.gridProfile} />
+                    </LabelRow>
+                  </ModeLabel>
                   <SwitchPanel>
                     <ModeButtons>
                       {modes.map((mode) => (
-                        <IconButton
-                          key={mode.name}
-                          onClick={() => updateConfig({ mode: mode.name })}
-                          active={config.mode === mode.name}
-                          title={mode.name.charAt(0).toUpperCase() + mode.name.slice(1)}
-                        >
-                          <mode.icon size={24} />
-                        </IconButton>
+                        <HintTooltip key={mode.name} text={mode.tooltip}>
+                          <IconButton
+                            onClick={() => updateConfig({ mode: mode.name })}
+                            active={config.mode === mode.name}
+                            aria-label={`${MODE_LABELS[mode.name]} mode`}
+                          >
+                            <mode.icon size={24} />
+                          </IconButton>
+                        </HintTooltip>
                       ))}
                     </ModeButtons>
                   </SwitchPanel>
