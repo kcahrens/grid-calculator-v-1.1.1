@@ -898,8 +898,18 @@ const FadeWrapper = ({ show, children }) => {
 };
 
 // Main Component
-function GridCalculator() {
+function GridCalculator({ syncUrl = true }) {
   const initialState = useMemo(() => readStateFromURL(), []);
+
+  useEffect(() => {
+    const href = 'https://fonts.googleapis.com/css2?family=Red+Hat+Text:wght@700&display=swap';
+    if (!document.querySelector(`link[href="${href}"]`)) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      document.head.appendChild(link);
+    }
+  }, []);
 
   const [storeName, setStoreName] = useState(initialState.storeName);
   const [config, setConfig] = useState(initialState.config);
@@ -921,11 +931,12 @@ function GridCalculator() {
   const increments = useMemo(() => Array.from({ length: 10 }, (_, i) => i * 0.1), []);
 
   useEffect(() => {
+    if (!syncUrl) return;
     const timer = setTimeout(() => {
       writeStateToURL({ storeName, config, viewMode, theme: initialState.theme ? theme : null });
     }, 150);
     return () => clearTimeout(timer);
-  }, [storeName, config, viewMode, theme, initialState.theme]);
+  }, [syncUrl, storeName, config, viewMode, theme, initialState.theme]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
