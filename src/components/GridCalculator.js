@@ -269,7 +269,7 @@ const fadeOut = keyframes`
 
 // Styled Components
 const AnimatedDiv = styled.div`
-  animation: ${({ isVisible }) => (isVisible ? fadeIn : fadeOut)} 0.3s ease-in-out forwards;
+  animation: ${({ $isVisible }) => ($isVisible ? fadeIn : fadeOut)} 0.3s ease-in-out forwards;
 `;
 
 const AppContainer = styled.div`
@@ -346,12 +346,12 @@ const ButtonGroup = styled.div`
 `;
 
 const IconButton = styled.button`
-  background: ${({ active, theme }) => (active ? theme.accent : 'none')};
+  background: ${({ $active, theme }) => ($active ? theme.accent : 'none')};
   border: none;
   cursor: ${({ disabled }) => (disabled ? 'not-allowed' : 'pointer')};
   padding: 8px;
-  color: ${({ active, theme, disabled }) =>
-    disabled ? theme.disabledText : (active ? '#fff' : theme.text)};
+  color: ${({ $active, theme, disabled }) =>
+    disabled ? theme.disabledText : ($active ? '#fff' : theme.text)};
   border-radius: 8px;
   opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
   width: 40px;
@@ -361,10 +361,8 @@ const IconButton = styled.button`
   align-items: center;
   justify-content: center;
   &:hover {
-    background: ${({ theme, noHover, disabled }) =>
-      disabled || noHover ? 'none' : theme.accent};
-    color: ${({ noHover, theme, disabled }) =>
-      disabled ? theme.disabledText : (noHover ? theme.text : '#fff')};
+    background: ${({ theme, disabled }) => disabled ? 'none' : theme.accent};
+    color: ${({ theme, disabled }) => disabled ? theme.disabledText : '#fff'};
   }
 `;
 
@@ -387,7 +385,7 @@ const ExportMenu = styled.div`
   border-radius: 8px;
   padding: 8px;
   margin-top: 4px;
-  display: ${({ show }) => (show ? 'block' : 'none')};
+  display: ${({ $show }) => ($show ? 'block' : 'none')};
   z-index: 10;
 `;
 
@@ -468,8 +466,8 @@ const ModalCloseButton = styled.button`
 `;
 
 const DropZone = styled.div`
-  border: 2px dashed ${({ active, theme }) => (active ? theme.accent : theme.border)};
-  background: ${({ active, theme }) => (active ? `${theme.accent}14` : 'transparent')};
+  border: 2px dashed ${({ $active, theme }) => ($active ? theme.accent : theme.border)};
+  background: ${({ $active, theme }) => ($active ? `${theme.accent}14` : 'transparent')};
   border-radius: 12px;
   padding: 32px 20px;
   text-align: center;
@@ -517,9 +515,9 @@ const ModalActions = styled.div`
 const ModalButton = styled.button`
   padding: 8px 16px;
   border-radius: 8px;
-  border: 1px solid ${({ primary, theme }) => (primary ? theme.accent : theme.border)};
-  background: ${({ primary, theme }) => (primary ? theme.accent : 'transparent')};
-  color: ${({ primary, theme }) => (primary ? '#fff' : theme.text)};
+  border: 1px solid ${({ $primary, theme }) => ($primary ? theme.accent : theme.border)};
+  background: ${({ $primary, theme }) => ($primary ? theme.accent : 'transparent')};
+  color: ${({ $primary, theme }) => ($primary ? '#fff' : theme.text)};
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -681,15 +679,15 @@ const Th = styled.th`
 `;
 
 const Td = styled.td`
-  background-color: ${({ isFirstColumn, theme }) =>
-    isFirstColumn ? theme.headerBg : theme.cardBg};
+  background-color: ${({ $isFirstColumn, theme }) =>
+    $isFirstColumn ? theme.headerBg : theme.cardBg};
   border-bottom: 1px solid ${({ theme }) => theme.border};
   padding: 14px;
   text-align: center;
   font-size: 14px;
-  font-weight: ${({ isFirstColumn }) => (isFirstColumn ? '700' : '400')};
+  font-weight: ${({ $isFirstColumn }) => ($isFirstColumn ? '700' : '400')};
   color: ${({ theme }) => theme.text};
-  cursor: ${({ isFirstColumn }) => (isFirstColumn ? 'default' : 'pointer')};
+  cursor: ${({ $isFirstColumn }) => ($isFirstColumn ? 'default' : 'pointer')};
 `;
 
 const Tooltip = styled.div`
@@ -704,9 +702,9 @@ const Tooltip = styled.div`
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transform: translate(-50%, -100%);
-  top: ${({ y }) => y}px;
-  left: ${({ x }) => x}px;
-  visibility: ${({ show }) => (show ? 'visible' : 'hidden')};
+  top: ${({ $y }) => $y}px;
+  left: ${({ $x }) => $x}px;
+  visibility: ${({ $show }) => ($show ? 'visible' : 'hidden')};
   white-space: pre-line;
 `;
 
@@ -799,7 +797,7 @@ const CopyToast = styled.div`
   font-weight: 600;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 2000;
-  opacity: ${({ show }) => (show ? 1 : 0)};
+  opacity: ${({ $show }) => ($show ? 1 : 0)};
   transition: opacity 0.3s ease;
   pointer-events: none;
 `;
@@ -893,7 +891,7 @@ const FadeWrapper = ({ show, children }) => {
   }, [show]);
 
   return shouldRender ? (
-    <AnimatedDiv isVisible={show}>
+    <AnimatedDiv $isVisible={show}>
       {children}
     </AnimatedDiv>
   ) : null;
@@ -1251,7 +1249,7 @@ function GridCalculator() {
                 <IconButton onClick={() => setShowExportMenu(!showExportMenu)} title="Export / Import">
                   <RiUploadLine size={24} />
                 </IconButton>
-                <ExportMenu show={showExportMenu}>
+                <ExportMenu $show={showExportMenu}>
                   <ExportOption onClick={handleExportPDF} title="Export PDF">
                     <RiFilePdfLine size={24} />
                   </ExportOption>
@@ -1264,10 +1262,10 @@ function GridCalculator() {
                 </ExportMenu>
               </ExportDropdown>
             )}
-            <IconButton onClick={() => setViewMode('graph')} active={viewMode === 'graph'}>
+            <IconButton onClick={() => setViewMode('graph')} $active={viewMode === 'graph'}>
               <RiLineChartLine size={24} />
             </IconButton>
-            <IconButton onClick={() => setViewMode('grid')} active={viewMode === 'grid'}>
+            <IconButton onClick={() => setViewMode('grid')} $active={viewMode === 'grid'}>
               <RiTableLine size={24} />
             </IconButton>
             <IconButton onClick={toggleTheme}>
@@ -1433,7 +1431,7 @@ function GridCalculator() {
                         <HintTooltip text={TOOLTIPS.capTypeHours}>
                           <IconButton
                             onClick={() => updateConfig({ capType: 'hours' })}
-                            active={config.capType === 'hours'}
+                            $active={config.capType === 'hours'}
                             aria-label="Cap by Hours"
                           >
                             <RiTimeLine size={24} />
@@ -1442,7 +1440,7 @@ function GridCalculator() {
                         <HintTooltip text={TOOLTIPS.capTypeELR}>
                           <IconButton
                             onClick={() => updateConfig({ capType: 'elr' })}
-                            active={config.capType === 'elr'}
+                            $active={config.capType === 'elr'}
                             aria-label="Cap by ELR"
                           >
                             <RiMoneyDollarBoxFill size={24} />
@@ -1465,7 +1463,7 @@ function GridCalculator() {
                         <HintTooltip key={mode.name} text={mode.tooltip}>
                           <IconButton
                             onClick={() => updateConfig({ mode: mode.name })}
-                            active={config.mode === mode.name}
+                            $active={config.mode === mode.name}
                             aria-label={`${MODE_LABELS[mode.name]} mode`}
                           >
                             <mode.icon size={24} />
@@ -1511,7 +1509,7 @@ function GridCalculator() {
                 <tbody>
                   {hourRates.map((hourRate) => (
                     <tr key={hourRate}>
-                      <Td isFirstColumn>{hourRate.toFixed(1)}</Td>
+                      <Td $isFirstColumn>{hourRate.toFixed(1)}</Td>
                       {increments.map((inc) => {
                         const totalHours = hourRate + inc;
                         const value = calculateValue(totalHours, config).toFixed(2);
@@ -1552,13 +1550,13 @@ function GridCalculator() {
                   </ModalMessage>
                   <ModalActions>
                     <ModalButton onClick={closeImportModal}>Cancel</ModalButton>
-                    <ModalButton primary onClick={applyImport}>Replace</ModalButton>
+                    <ModalButton $primary onClick={applyImport}>Replace</ModalButton>
                   </ModalActions>
                 </>
               ) : (
                 <>
                   <DropZone
-                    active={importModalState.dragActive}
+                    $active={importModalState.dragActive}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
@@ -1579,11 +1577,11 @@ function GridCalculator() {
             </Modal>
           </ModalOverlay>
         )}
-        <Tooltip show={tooltip.show} x={tooltip.x} y={tooltip.y}>
+        <Tooltip $show={tooltip.show} $x={tooltip.x} $y={tooltip.y}>
           {tooltip.content}
         </Tooltip>
         <VersionLabel>v{version}</VersionLabel>
-        <CopyToast show={showCopyToast}>{copyToastMessage}</CopyToast>
+        <CopyToast $show={showCopyToast}>{copyToastMessage}</CopyToast>
       </AppContainer>
     </ThemeProvider>
   );
