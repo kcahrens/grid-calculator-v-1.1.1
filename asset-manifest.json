@@ -1,21 +1,19 @@
 {
   "files": {
-    "main.css": "/grid-calculator-v-1.1.1/static/css/main.39f7c5c2.css",
-    "main.js": "/grid-calculator-v-1.1.1/static/js/main.e90a0f9f.js",
+    "main.css": "/grid-calculator-v-1.1.1/static/css/main.93a0497a.css",
+    "main.js": "/grid-calculator-v-1.1.1/static/js/main.b4b27b19.js",
     "static/js/239.22118502.chunk.js": "/grid-calculator-v-1.1.1/static/js/239.22118502.chunk.js",
     "static/js/977.ec18f791.chunk.js": "/grid-calculator-v-1.1.1/static/js/977.ec18f791.chunk.js",
     "static/js/732.7cd86b07.chunk.js": "/grid-calculator-v-1.1.1/static/js/732.7cd86b07.chunk.js",
-    "static/js/453.81a78596.chunk.js": "/grid-calculator-v-1.1.1/static/js/453.81a78596.chunk.js",
     "index.html": "/grid-calculator-v-1.1.1/index.html",
-    "main.39f7c5c2.css.map": "/grid-calculator-v-1.1.1/static/css/main.39f7c5c2.css.map",
-    "main.e90a0f9f.js.map": "/grid-calculator-v-1.1.1/static/js/main.e90a0f9f.js.map",
+    "main.93a0497a.css.map": "/grid-calculator-v-1.1.1/static/css/main.93a0497a.css.map",
+    "main.b4b27b19.js.map": "/grid-calculator-v-1.1.1/static/js/main.b4b27b19.js.map",
     "239.22118502.chunk.js.map": "/grid-calculator-v-1.1.1/static/js/239.22118502.chunk.js.map",
     "977.ec18f791.chunk.js.map": "/grid-calculator-v-1.1.1/static/js/977.ec18f791.chunk.js.map",
-    "732.7cd86b07.chunk.js.map": "/grid-calculator-v-1.1.1/static/js/732.7cd86b07.chunk.js.map",
-    "453.81a78596.chunk.js.map": "/grid-calculator-v-1.1.1/static/js/453.81a78596.chunk.js.map"
+    "732.7cd86b07.chunk.js.map": "/grid-calculator-v-1.1.1/static/js/732.7cd86b07.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.39f7c5c2.css",
-    "static/js/main.e90a0f9f.js"
+    "static/css/main.93a0497a.css",
+    "static/js/main.b4b27b19.js"
   ]
 }
