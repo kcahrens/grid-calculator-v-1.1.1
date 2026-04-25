@@ -38,6 +38,9 @@ const sharedConfig = {
 
 const libConfig = {
   ...sharedConfig,
+  // Replace process.env.NODE_ENV at build time — library bundles run in the
+  // browser where process is undefined (no webpack/CRA polyfill).
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
   build: {
     lib: {
       entry: resolve(__dirname, 'src/library.js'),

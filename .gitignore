@@ -12,6 +12,9 @@
 /build
 /dist
 
+# local embed smoke-test (not part of the repo)
+/test-embed.html
+
 # stray build output at repo root (from a past accidental build-at-root)
 /static
 /asset-manifest.json
