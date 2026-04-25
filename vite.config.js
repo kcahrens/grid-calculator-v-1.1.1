@@ -1,15 +1,43 @@
-import { defineConfig } from 'vite';
+import { defineConfig, transformWithEsbuild } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
 // BUILD_FORMAT controls which output to produce:
 //   umd  — bundles React in (for <script> tag embedding, zero host deps)
 //   es   — externalizes React (for bundler-based host apps)
-//   app  — standard SPA build (default; used by npm run build:app)
+//   (unset) — standard SPA dev/build (used by npm run dev / build:app)
 const format = process.env.BUILD_FORMAT;
 
+// The project uses .js extensions for JSX files (CRA convention). Vite's
+// import-analysis plugin fails on JSX in .js files, so we pre-transform them
+// with esbuild (using the jsx loader) before any other plugin sees them.
+const jsxInJsPlugin = {
+  name: 'treat-js-files-as-jsx',
+  enforce: 'pre',
+  async transform(code, id) {
+    if (!id.match(/\/src\/.*\.js$/)) return null;
+    return transformWithEsbuild(code, id, { loader: 'jsx', jsx: 'automatic' });
+  },
+};
+
+const sharedConfig = {
+  plugins: [jsxInJsPlugin, react()],
+  resolve: {
+    alias: {
+      // xlsx-js-style's dist bundle accesses stream.Readable at init time.
+      // Vite 6 makes externalized Node built-ins throw on property access
+      // (truthy Proxy), so the package's own || {} guard doesn't save it.
+      // A plain stub with the right shape is the minimal fix.
+      stream: resolve(__dirname, 'src/stubs/stream.js'),
+    },
+  },
+  optimizeDeps: {
+    esbuildOptions: { loader: { '.js': 'jsx' } },
+  },
+};
+
 const libConfig = {
-  plugins: [react()],
+  ...sharedConfig,
   build: {
     lib: {
       entry: resolve(__dirname, 'src/library.js'),
@@ -32,8 +60,4 @@ const libConfig = {
   },
 };
 
-const appConfig = {
-  plugins: [react()],
-};
-
-export default defineConfig(format ? libConfig : appConfig);
+export default defineConfig(format ? libConfig : sharedConfig);
