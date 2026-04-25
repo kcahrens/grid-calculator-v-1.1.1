@@ -238,7 +238,8 @@ const lightTheme = {
   tooltipBg: '#ffffff',
   tooltipText: '#1c2526',
   disabledBg: '#e0e0e0',
-  disabledText: '#a0a0a0'
+  disabledText: '#a0a0a0',
+  switchPanelBg: '#e6e6e6'
 };
 
 const darkTheme = {
@@ -251,7 +252,8 @@ const darkTheme = {
   tooltipBg: '#25292b',
   tooltipText: '#e6ecef',
   disabledBg: '#404040',
-  disabledText: '#707070'
+  disabledText: '#707070',
+  switchPanelBg: '#404040'
 };
 
 // Keyframes
@@ -584,7 +586,7 @@ const ModeButtons = styled.div`
 `;
 
 const SwitchPanel = styled.div`
-  background-color: ${({ theme }) => (theme === lightTheme ? '#e6e6e6' : '#404040')};
+  background-color: ${({ theme }) => theme.switchPanelBg};
   border: 1px solid ${({ theme }) => theme.border};
   border-radius: 10px;
   padding: 8px;
@@ -1200,7 +1202,6 @@ function GridCalculator() {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text)
-      .then(() => console.log(`Copied: ${text}`))
       .catch(() => triggerToast('Failed to copy'));
   };
 
