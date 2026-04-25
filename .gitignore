@@ -11,6 +11,14 @@
 # production
 /build
 
+# stray build output at repo root (from a past accidental build-at-root)
+/static
+/asset-manifest.json
+
+# editor / tooling
+.vscode
+.idea
+
 # misc
 .DS_Store
 .env.local
