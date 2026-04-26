@@ -2,12 +2,6 @@ import { defineConfig, transformWithEsbuild } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-// BUILD_FORMAT controls which output to produce:
-//   umd  — bundles React in (for <script> tag embedding, zero host deps)
-//   es   — externalizes React (for bundler-based host apps)
-//   (unset) — standard SPA dev/build (used by npm run dev / build:app)
-const format = process.env.BUILD_FORMAT;
-
 // The project uses .js extensions for JSX files (CRA convention). Vite's
 // import-analysis plugin fails on JSX in .js files, so we pre-transform them
 // with esbuild (using the jsx loader) before any other plugin sees them.
@@ -36,31 +30,49 @@ const sharedConfig = {
   },
 };
 
-const libConfig = {
-  ...sharedConfig,
-  // Replace process.env.NODE_ENV at build time — library bundles run in the
-  // browser where process is undefined (no webpack/CRA polyfill).
-  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
-  build: {
-    lib: {
-      entry: resolve(__dirname, 'src/library.js'),
-      name: 'GridCalculator',
-      formats: [format],
-      fileName: () => `grid-calculator.${format}.js`,
-    },
-    rollupOptions: {
-      external: format === 'es' ? ['react', 'react-dom', 'react/jsx-runtime'] : [],
-      output: {
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM',
-          'react/jsx-runtime': 'React',
-        },
-      },
-    },
-    outDir: 'dist',
+// Library build modes:
+//   lib-umd — bundles React in (for <script> tag embedding, zero host deps).
+//             Runs first; clears dist/.
+//   lib-es  — externalizes React (for bundler-based host apps).
+//             Runs second; preserves the umd output already in dist/.
+// Order is enforced by the npm `build` script's `&&` chain.
+const libModes = {
+  'lib-umd': { format: 'umd', external: [], emptyOutDir: true },
+  'lib-es': {
+    format: 'es',
+    external: ['react', 'react-dom', 'react/jsx-runtime'],
     emptyOutDir: false,
   },
 };
 
-export default defineConfig(format ? libConfig : sharedConfig);
+export default defineConfig(({ mode }) => {
+  const lib = libModes[mode];
+  if (!lib) return sharedConfig;
+
+  return {
+    ...sharedConfig,
+    // Replace process.env.NODE_ENV at build time — library bundles run in the
+    // browser where process is undefined (no webpack/CRA polyfill).
+    define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+    build: {
+      lib: {
+        entry: resolve(__dirname, 'src/library.js'),
+        name: 'GridCalculator',
+        formats: [lib.format],
+        fileName: () => `grid-calculator.${lib.format}.js`,
+      },
+      rollupOptions: {
+        external: lib.external,
+        output: {
+          globals: {
+            react: 'React',
+            'react-dom': 'ReactDOM',
+            'react/jsx-runtime': 'React',
+          },
+        },
+      },
+      outDir: 'dist',
+      emptyOutDir: lib.emptyOutDir,
+    },
+  };
+});

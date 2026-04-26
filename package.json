@@ -16,7 +16,7 @@
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "BUILD_FORMAT=umd vite build && BUILD_FORMAT=es vite build",
+    "build": "vite build --mode lib-umd && vite build --mode lib-es",
     "build:app": "vite build",
     "preview": "vite preview",
     "predeploy": "npm run build:app",
