@@ -11,6 +11,7 @@
 # production
 /build
 /dist
+/lib
 
 # local embed smoke-test (not part of the repo)
 /test-embed.html

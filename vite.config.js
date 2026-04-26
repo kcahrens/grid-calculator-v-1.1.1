@@ -30,11 +30,11 @@ const sharedConfig = {
   },
 };
 
-// Library build modes:
+// Library build modes (output to lib/, separate from the SPA's dist/):
 //   lib-umd — bundles React in (for <script> tag embedding, zero host deps).
-//             Runs first; clears dist/.
+//             Runs first; clears lib/.
 //   lib-es  — externalizes React (for bundler-based host apps).
-//             Runs second; preserves the umd output already in dist/.
+//             Runs second; preserves the umd output already in lib/.
 // Order is enforced by the npm `build` script's `&&` chain.
 const libModes = {
   'lib-umd': { format: 'umd', external: [], emptyOutDir: true },
@@ -54,6 +54,8 @@ export default defineConfig(({ mode }) => {
     // Replace process.env.NODE_ENV at build time — library bundles run in the
     // browser where process is undefined (no webpack/CRA polyfill).
     define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+    // public/ is for the SPA only; library consumers shouldn't get favicon.ico.
+    publicDir: false,
     build: {
       lib: {
         entry: resolve(__dirname, 'src/library.js'),
@@ -67,11 +69,10 @@ export default defineConfig(({ mode }) => {
           globals: {
             react: 'React',
             'react-dom': 'ReactDOM',
-            'react/jsx-runtime': 'React',
           },
         },
       },
-      outDir: 'dist',
+      outDir: 'lib',
       emptyOutDir: lib.emptyOutDir,
     },
   };
