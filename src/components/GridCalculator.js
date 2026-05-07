@@ -1552,7 +1552,7 @@ function GridCalculator({ syncUrl = true }) {
                 </SettingsOption>
                 <SettingsOption onClick={() => { setShowSettingsMenu(false); openFirstHourModal(); }}>
                   <RiTimeLine size={18} />
-                  Modify first hour
+                  Override first row
                 </SettingsOption>
               </SettingsMenu>
             </ExportDropdown>
@@ -1913,7 +1913,7 @@ function GridCalculator({ syncUrl = true }) {
               </ModalHeader>
               <ModalMessage>
                 Force every calculated price (grid, chart, calculator) to end with these cents.<br />
-                Example: 123.456 → 123.88
+                Example: $123.45 → $123.88
               </ModalMessage>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
                 <Label style={{ minWidth: '80px' }}>Cents (00-99)</Label>
