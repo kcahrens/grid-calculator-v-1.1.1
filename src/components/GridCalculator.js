@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine, RiBarChartLine } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine, RiBarChartLine, RiSettingsLine } from 'react-icons/ri';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx-js-style';
@@ -128,6 +128,20 @@ const calculateValue = (totalHours, config = DEFAULT_CONFIG) => {
   return Number(totalAmount.toFixed(2));
 };
 
+// New helper: applies first-hour overrides (0.1–0.9 only) then optional cents ending (except on overridden first-hour cells)
+const getEffectivePrice = (totalHours, config, customCents, firstHourOverrides) => {
+  const h = totalHours.toFixed(1);
+  // First-hour override takes precedence and is NOT affected by cents
+  if (firstHourOverrides && firstHourOverrides[h] != null && totalHours >= 0.1 && totalHours <= 0.9) {
+    return firstHourOverrides[h];
+  }
+  const raw = calculateValue(totalHours, config);
+  if (!customCents) return raw;
+  // Cents override: just replace the cents part (keep floor dollars) — skip headers/1st row handled at call site
+  const dollars = Math.floor(raw);
+  return Number((dollars + parseInt(customCents, 10) / 100).toFixed(2));
+};
+
 const buildFilename = (store, ext) => {
   const safeStore = (store || '').trim().replace(/\s+/g, '_');
   const date = new Date().toISOString().slice(0, 10);
@@ -148,6 +162,16 @@ const readStateFromURL = () => {
   const capType = CAP_TYPE_VALUES.includes(get('cap')) ? get('cap') : DEFAULT_CONFIG.capType;
   const view = VIEW_MODES.includes(get('view')) ? get('view') : 'grid';
   const theme = get('theme') === 'dark' || get('theme') === 'light' ? get('theme') : null;
+  const cents = get('cents');
+  const fhParam = get('fh');
+  const firstHourOverrides = {};
+  if (fhParam) {
+    const vals = fhParam.split(',');
+    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].forEach((h, i) => {
+      const v = vals[i];
+      if (v && v !== 'null' && !isNaN(parseFloat(v))) firstHourOverrides[h.toFixed(1)] = parseFloat(v);
+    });
+  }
   return {
     storeName: get('name') || '',
     config: {
@@ -161,11 +185,13 @@ const readStateFromURL = () => {
       inputHours: get('hours') ?? DEFAULT_CONFIG.inputHours
     },
     viewMode: view,
-    theme
+    theme,
+    customCents: cents && /^\d{2}$/.test(cents) ? cents : null,
+    firstHourOverrides
   };
 };
 
-const writeStateToURL = ({ storeName, config, viewMode, theme }) => {
+const writeStateToURL = ({ storeName, config, viewMode, theme, customCents, firstHourOverrides }) => {
   const params = new URLSearchParams();
   if (storeName) params.set('name', storeName);
   if (config.baseRate !== DEFAULT_CONFIG.baseRate) params.set('base', config.baseRate);
@@ -184,6 +210,13 @@ const writeStateToURL = ({ storeName, config, viewMode, theme }) => {
   if (config.inputHours) params.set('hours', config.inputHours);
   if (viewMode !== 'grid') params.set('view', viewMode);
   if (theme) params.set('theme', theme);
+  if (customCents) params.set('cents', customCents);
+  if (firstHourOverrides && Object.keys(firstHourOverrides).length > 0) {
+    const fhStr = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+      .map(h => firstHourOverrides[h.toFixed(1)] ?? 'null')
+      .join(',');
+    params.set('fh', fhStr);
+  }
   const qs = params.toString();
   const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
   window.history.replaceState(null, '', url);
@@ -265,6 +298,11 @@ const fadeIn = keyframes`
 const fadeOut = keyframes`
   from { opacity: 1; transform: translateY(0); }
   to { opacity: 0; transform: translateY(-10px); }
+`;
+
+const backdropFadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
 `;
 
 // Styled Components
@@ -400,6 +438,100 @@ const ExportOption = styled.button`
   color: ${({ theme }) => theme.text};
   cursor: pointer;
   border-radius: 4px;
+  &:hover {
+    background-color: ${({ theme }) => theme.accent};
+    color: #fff;
+  }
+`;
+
+const SettingsMenu = styled.div`
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: ${({ theme }) => theme.cardBg};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 8px;
+  padding: 6px;
+  margin-top: 6px;
+  display: ${({ $show }) => ($show ? 'flex' : 'none')};
+  flex-direction: column;
+  min-width: 200px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+`;
+
+const FocusBackdrop = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 2000;
+  animation: ${backdropFadeIn} 0.35s ease-out;
+`;
+
+const editBarSlideUp = keyframes`
+  from { opacity: 0; transform: translate(-50%, 30px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+`;
+
+const EditActionBar = styled.div`
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: ${({ theme }) => theme.cardBg};
+  color: ${({ theme }) => theme.text};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 12px;
+  padding: 10px 14px;
+  z-index: 3001;
+  animation: ${editBarSlideUp} 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+`;
+
+const EditBarHelper = styled.span`
+  font-size: 12px;
+  opacity: 0.6;
+  margin-right: 8px;
+  font-weight: 500;
+`;
+
+const EditingCellInput = styled.input`
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: ${({ theme }) => theme.text};
+  font-size: 14px;
+  font-weight: 400;
+  text-align: center;
+  outline: none;
+  padding: 14px 0;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  &::placeholder {
+    color: ${({ theme }) => theme.text};
+    opacity: 0.42;
+  }
+`;
+
+const SettingsOption = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
+  color: ${({ theme }) => theme.text};
+  cursor: pointer;
+  border-radius: 6px;
+  white-space: nowrap;
   &:hover {
     background-color: ${({ theme }) => theme.accent};
     color: #fff;
@@ -665,7 +797,7 @@ const Table = styled.table`
   border-collapse: separate;
   border-spacing: 0;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: ${({ $expanded }) => ($expanded ? 'visible' : 'hidden')};
 `;
 
 const Th = styled.th`
@@ -676,6 +808,11 @@ const Th = styled.th`
   font-size: 14px;
   font-weight: 700;
   color: ${({ theme }) => theme.text};
+  position: ${({ $focused }) => ($focused ? 'relative' : 'static')};
+  z-index: ${({ $focused }) => ($focused ? 3000 : 'auto')};
+  transition: border-radius 0.32s ease;
+  ${({ $focused, $first }) => $focused && $first && `border-top-left-radius: 12px;`}
+  ${({ $focused, $last }) => $focused && $last && `border-top-right-radius: 12px;`}
 `;
 
 const Td = styled.td`
@@ -687,7 +824,18 @@ const Td = styled.td`
   font-size: 14px;
   font-weight: ${({ $isFirstColumn }) => ($isFirstColumn ? '700' : '400')};
   color: ${({ theme }) => theme.text};
-  cursor: ${({ $isFirstColumn }) => ($isFirstColumn ? 'default' : 'pointer')};
+  cursor: ${({ $isFirstColumn, $editable }) => ($editable ? 'text' : ($isFirstColumn ? 'default' : 'pointer'))};
+  position: ${({ $focused }) => ($focused ? 'relative' : 'static')};
+  z-index: ${({ $focused }) => ($focused ? 3000 : 'auto')};
+  transition: border-radius 0.32s ease, box-shadow 0.18s ease;
+  ${({ $focused, $first }) => $focused && $first && `border-bottom-left-radius: 12px;`}
+  ${({ $focused, $last }) => $focused && $last && `border-bottom-right-radius: 12px;`}
+  ${({ $editable, theme }) => $editable && `
+    padding: 0;
+    &:focus-within {
+      box-shadow: inset 0 -3px 0 0 ${theme.accent};
+    }
+  `}
 `;
 
 const Tooltip = styled.div`
@@ -924,8 +1072,18 @@ function GridCalculator({ syncUrl = true }) {
   const [showCopyToast, setShowCopyToast] = useState(false);
   const [copyToastMessage, setCopyToastMessage] = useState('Copied!');
   const [importModalState, setImportModalState] = useState({ open: false, pending: null, error: null, dragActive: false });
+  const [customCents, setCustomCents] = useState(initialState.customCents || null);
+  const [firstHourOverrides, setFirstHourOverrides] = useState(initialState.firstHourOverrides || {});
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [centsModalOpen, setCentsModalOpen] = useState(false);
+  const [firstHourModalOpen, setFirstHourModalOpen] = useState(false);
+  const [tempCents, setTempCents] = useState('');
+  const [tempFirstHour, setTempFirstHour] = useState({}); // temp edits for modal
+  const [actionBarTop, setActionBarTop] = useState(null);
   const dropdownRef = useRef(null);
   const fileInputRef = useRef(null);
+  const settingsRef = useRef(null);
+  const editingRowRef = useRef(null);
 
   const hourRates = useMemo(() => Array.from({ length: 21 }, (_, i) => i), []);
   const increments = useMemo(() => Array.from({ length: 10 }, (_, i) => i * 0.1), []);
@@ -933,20 +1091,61 @@ function GridCalculator({ syncUrl = true }) {
   useEffect(() => {
     if (!syncUrl) return;
     const timer = setTimeout(() => {
-      writeStateToURL({ storeName, config, viewMode, theme: initialState.theme ? theme : null });
+      writeStateToURL({ storeName, config, viewMode, theme: initialState.theme ? theme : null, customCents, firstHourOverrides });
     }, 150);
     return () => clearTimeout(timer);
-  }, [syncUrl, storeName, config, viewMode, theme, initialState.theme]);
+  }, [syncUrl, storeName, config, viewMode, theme, initialState.theme, customCents, firstHourOverrides]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowExportMenu(false);
       }
+      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+        setShowSettingsMenu(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!firstHourModalOpen && !centsModalOpen) return;
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        if (firstHourModalOpen) {
+          setFirstHourModalOpen(false);
+          setTempFirstHour({});
+        }
+        if (centsModalOpen) {
+          setCentsModalOpen(false);
+          setTempCents('');
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [firstHourModalOpen, centsModalOpen]);
+
+  useLayoutEffect(() => {
+    if (!firstHourModalOpen) {
+      setActionBarTop(null);
+      return;
+    }
+    const measure = () => {
+      if (editingRowRef.current) {
+        const rect = editingRowRef.current.getBoundingClientRect();
+        setActionBarTop(rect.bottom + 20);
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [firstHourModalOpen, viewMode]);
 
   const updateConfig = useCallback((patch) => {
     setConfig((prev) => ({ ...prev, ...patch }));
@@ -958,7 +1157,7 @@ function GridCalculator({ syncUrl = true }) {
 
   const buildGridRows = () => hourRates.map((hourRate) => [
     hourRate.toFixed(1),
-    ...increments.map((inc) => calculateValue(hourRate + inc, config).toFixed(2))
+    ...increments.map((inc) => getEffectivePrice(hourRate + inc, config, customCents, firstHourOverrides).toFixed(2))
   ]);
 
   const handleExportPDF = () => {
@@ -1043,7 +1242,7 @@ function GridCalculator({ syncUrl = true }) {
     const gridHeader = ['Labor Time', ...increments.map((inc) => Number(inc.toFixed(1)))];
     const gridData = hourRates.map((hourRate) => [
       Number(hourRate.toFixed(1)),
-      ...increments.map((inc) => calculateValue(hourRate + inc, config))
+      ...increments.map((inc) => getEffectivePrice(hourRate + inc, config, customCents, firstHourOverrides))
     ]);
     const gridAoa = [[titleText], gridHeader, ...gridData];
     const gridSheet = XLSX.utils.aoa_to_sheet(gridAoa);
@@ -1123,6 +1322,65 @@ function GridCalculator({ syncUrl = true }) {
     setImportModalState({ open: false, pending: null, error: null, dragActive: false });
   };
 
+  // New settings modals
+  const openCentsModal = () => {
+    setTempCents(customCents || '');
+    setCentsModalOpen(true);
+  };
+  const closeCentsModal = () => {
+    setCentsModalOpen(false);
+    setTempCents('');
+  };
+  const applyCents = () => {
+    const val = tempCents.trim();
+    if (val === '' || (parseInt(val, 10) >= 0 && parseInt(val, 10) <= 99)) {
+      setCustomCents(val === '' ? null : val.padStart(2, '0'));
+      closeCentsModal();
+      triggerToast(val === '' ? 'Cents reset to auto' : `Cents set to .${val.padStart(2, '0')}`);
+    } else {
+      triggerToast('Please enter 00-99');
+    }
+  };
+  const resetCents = () => {
+    setCustomCents(null);
+    setTempCents('');
+    closeCentsModal();
+    triggerToast('Cents reset to auto');
+  };
+
+  const openFirstHourModal = () => {
+    // Editor lifts the actual grid rows in place — switch to grid view first if the user is on the chart
+    if (viewMode !== 'grid') setViewMode('grid');
+    const init = {};
+    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].forEach(h => {
+      const key = h.toFixed(1);
+      init[key] = firstHourOverrides[key] ?? null;
+    });
+    setTempFirstHour(init);
+    setFirstHourModalOpen(true);
+  };
+  const closeFirstHourModal = () => {
+    setFirstHourModalOpen(false);
+    setTempFirstHour({});
+  };
+  const applyFirstHour = () => {
+    const cleaned = {};
+    Object.entries(tempFirstHour).forEach(([k, v]) => {
+      if (v != null && !isNaN(parseFloat(v)) && parseFloat(v) >= 0) {
+        cleaned[k] = parseFloat(v);
+      }
+    });
+    setFirstHourOverrides(cleaned);
+    closeFirstHourModal();
+    triggerToast('First hour overrides applied');
+  };
+  const resetFirstHour = () => {
+    setFirstHourOverrides({});
+    setTempFirstHour({});
+    closeFirstHourModal();
+    triggerToast('First hour resets to auto');
+  };
+
   const processImportFile = async (file) => {
     if (!file) return;
     if (!/\.xlsx$/i.test(file.name)) {
@@ -1177,18 +1435,18 @@ function GridCalculator({ syncUrl = true }) {
       increments.forEach((inc) => {
         const totalHours = hourRate + inc;
         if (totalHours >= 0) {
-          const totalAmount = calculateValue(totalHours, config);
+          const totalAmount = getEffectivePrice(totalHours, config, customCents, firstHourOverrides);
           const elr = totalHours > 0 ? parseFloat((totalAmount / totalHours).toFixed(2)) : 0;
           data.push({ hours: totalHours, elr, totalAmount });
         }
       });
     });
     return data.sort((a, b) => a.hours - b.hours);
-  }, [config, hourRates, increments]);
+  }, [config, hourRates, increments, customCents, firstHourOverrides]);
 
   const handleMouseEnter = (e, hourRate, inc) => {
     const totalHours = hourRate + inc;
-    const totalAmount = calculateValue(totalHours, config);
+    const totalAmount = getEffectivePrice(totalHours, config, customCents, firstHourOverrides);
     const elr = totalHours > 0 ? (totalAmount / totalHours).toFixed(2) : 'N/A';
     const rect = e.target.getBoundingClientRect();
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -1206,7 +1464,7 @@ function GridCalculator({ syncUrl = true }) {
   const numInputHours = Number(config.inputHours || '');
   let totalAmount = 0;
   if (!isNaN(numInputHours) && numInputHours >= 0) {
-    totalAmount = calculateValue(numInputHours, config);
+    totalAmount = getEffectivePrice(numInputHours, config, customCents, firstHourOverrides);
   }
 
   const copyToClipboard = (text) => {
@@ -1282,6 +1540,22 @@ function GridCalculator({ syncUrl = true }) {
             <IconButton onClick={toggleTheme}>
               {theme === 'light' ? <RiSunLine size={24} /> : <RiMoonLine size={24} />}
             </IconButton>
+            {/* Settings / Gear dropdown - rightmost */}
+            <ExportDropdown ref={settingsRef}>
+              <IconButton onClick={() => setShowSettingsMenu(!showSettingsMenu)} title="Settings" $active={showSettingsMenu}>
+                <RiSettingsLine size={24} />
+              </IconButton>
+              <SettingsMenu $show={showSettingsMenu}>
+                <SettingsOption onClick={() => { setShowSettingsMenu(false); openCentsModal(); }}>
+                  <RiMoneyDollarBoxFill size={18} />
+                  Modify cents ending
+                </SettingsOption>
+                <SettingsOption onClick={() => { setShowSettingsMenu(false); openFirstHourModal(); }}>
+                  <RiTimeLine size={18} />
+                  Override first row
+                </SettingsOption>
+              </SettingsMenu>
+            </ExportDropdown>
           </ButtonGroup>
         </Header>
         <Card>
@@ -1499,7 +1773,7 @@ function GridCalculator({ syncUrl = true }) {
             <CalculatorContainer>
               {config.inputHours && !isNaN(numInputHours) && numInputHours >= 0 && (
                 <ResultContainer>
-                  <ResultText>Total Amount: ${totalAmount.toFixed(2)}</ResultText>
+                  <ResultText>Total Amount: $${totalAmount.toFixed(2)}</ResultText>
                   <CopyButton onClick={handleCopyTotalAmount} title="Copy Total Amount">
                     <RiFileCopyLine />
                   </CopyButton>
@@ -1508,36 +1782,71 @@ function GridCalculator({ syncUrl = true }) {
             </CalculatorContainer>
           ) : (
             <TableContainer>
-              <Table>
+              <Table $expanded={firstHourModalOpen}>
                 <thead>
                   <tr>
-                    <Th>Labor Time</Th>
-                    {increments.map((inc) => (
-                      <Th key={inc}>{inc.toFixed(1)}</Th>
+                    <Th $focused={firstHourModalOpen} $first>Labor Time</Th>
+                    {increments.map((inc, idx) => (
+                      <Th key={inc} $focused={firstHourModalOpen} $last={idx === increments.length - 1}>
+                        {inc.toFixed(1)}
+                      </Th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {hourRates.map((hourRate) => (
-                    <tr key={hourRate}>
-                      <Td $isFirstColumn>{hourRate.toFixed(1)}</Td>
-                      {increments.map((inc) => {
-                        const totalHours = hourRate + inc;
-                        const value = calculateValue(totalHours, config).toFixed(2);
-                        return (
-                          <Td
-                            key={inc}
-                            onMouseEnter={(e) => handleMouseEnter(e, hourRate, inc)}
-                            onMouseLeave={handleMouseLeave}
-                            onClick={() => handleGridCellClick(value)}
-                            title="Click to copy"
-                          >
-                            {value}
-                          </Td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                  {hourRates.map((hourRate) => {
+                    const isEditingRow = firstHourModalOpen && hourRate === 0;
+                    const lastIdx = increments.length - 1;
+                    return (
+                      <tr key={hourRate} ref={isEditingRow ? editingRowRef : undefined}>
+                        <Td $isFirstColumn $focused={isEditingRow} $first={isEditingRow}>{hourRate.toFixed(1)}</Td>
+                        {increments.map((inc, idx) => {
+                          const totalHours = hourRate + inc;
+                          const value = getEffectivePrice(totalHours, config, customCents, firstHourOverrides).toFixed(2);
+                          const editable = isEditingRow && inc > 0;
+                          const isLast = isEditingRow && idx === lastIdx;
+                          if (editable) {
+                            const key = inc.toFixed(1);
+                            const auto = calculateValue(inc, config).toFixed(2);
+                            const raw = tempFirstHour[key];
+                            const inputValue = raw == null ? '' : String(raw);
+                            return (
+                              <Td key={inc} $focused $editable $last={isLast}>
+                                <EditingCellInput
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={inputValue}
+                                  placeholder={auto}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (v === '' || /^\d{0,6}(\.\d{0,2})?$/.test(v)) {
+                                      setTempFirstHour(prev => ({ ...prev, [key]: v === '' ? null : v }));
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') applyFirstHour();
+                                  }}
+                                />
+                              </Td>
+                            );
+                          }
+                          return (
+                            <Td
+                              key={inc}
+                              $focused={isEditingRow}
+                              $last={isLast}
+                              onMouseEnter={!firstHourModalOpen ? (e) => handleMouseEnter(e, hourRate, inc) : undefined}
+                              onMouseLeave={!firstHourModalOpen ? handleMouseLeave : undefined}
+                              onClick={!firstHourModalOpen ? () => handleGridCellClick(value) : undefined}
+                              title={firstHourModalOpen ? undefined : 'Click to copy'}
+                            >
+                              {value}
+                            </Td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </Table>
             </TableContainer>
@@ -1573,7 +1882,7 @@ function GridCalculator({ syncUrl = true }) {
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <DropZoneText>Drag &amp; drop a Labor Rate Matrix .xlsx here</DropZoneText>
+                    <DropZoneText>Drag & drop a Labor Rate Matrix .xlsx here</DropZoneText>
                     <DropZoneSubtext>or click to choose a file</DropZoneSubtext>
                   </DropZone>
                   <HiddenFileInput
@@ -1591,6 +1900,58 @@ function GridCalculator({ syncUrl = true }) {
         <Tooltip $show={tooltip.show} $x={tooltip.x} $y={tooltip.y}>
           {tooltip.content}
         </Tooltip>
+
+        {/* Cents Ending Modal */}
+        {centsModalOpen && (
+          <ModalOverlay onClick={closeCentsModal}>
+            <Modal onClick={(e) => e.stopPropagation()}>
+              <ModalHeader>
+                <ModalTitle>Modify Cents Ending</ModalTitle>
+                <ModalCloseButton onClick={closeCentsModal} aria-label="Close">
+                  <RiCloseLine size={22} />
+                </ModalCloseButton>
+              </ModalHeader>
+              <ModalMessage>
+                Force every calculated price (grid, chart, calculator) to end with these cents.<br />
+                Example: $123.45 → $123.88
+              </ModalMessage>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
+                <Label style={{ minWidth: '80px' }}>Cents (00-99)</Label>
+                <Input
+                  type="number"
+                  value={tempCents}
+                  onChange={(e) => setTempCents(e.target.value)}
+                  placeholder="88"
+                  min="0"
+                  max="99"
+                  style={{ width: '120px', textAlign: 'center' }}
+                />
+              </div>
+              <ModalActions>
+                <ModalButton onClick={resetCents}>Reset to Auto</ModalButton>
+                <ModalButton $primary onClick={applyCents}>Apply</ModalButton>
+              </ModalActions>
+            </Modal>
+          </ModalOverlay>
+        )}
+
+        {/* First Hour Editor — backdrop blurs/dims everything, the actual first 2 rows lift in place via z-index */}
+        {firstHourModalOpen && (
+          <>
+            <FocusBackdrop onClick={closeFirstHourModal} />
+            <EditActionBar
+              role="dialog"
+              aria-label="First hour override editor"
+              style={actionBarTop != null ? { top: `${actionBarTop}px`, bottom: 'auto' } : undefined}
+            >
+              <EditBarHelper>Editing first hour overrides — Esc to cancel, Enter to apply</EditBarHelper>
+              <ModalButton onClick={resetFirstHour}>Reset All</ModalButton>
+              <ModalButton onClick={closeFirstHourModal}>Cancel</ModalButton>
+              <ModalButton $primary onClick={applyFirstHour}>Apply</ModalButton>
+            </EditActionBar>
+          </>
+        )}
+
         <VersionLabel>v{version}</VersionLabel>
         <CopyToast $show={showCopyToast}>{copyToastMessage}</CopyToast>
       </AppContainer>
