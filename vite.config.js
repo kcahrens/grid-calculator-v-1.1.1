@@ -15,6 +15,10 @@ const jsxInJsPlugin = {
 };
 
 const sharedConfig = {
+  // GitHub Pages serves the SPA from /grid-calculator-v-1.1.1/, so asset URLs
+  // must be prefixed accordingly. Library builds set their own output paths
+  // and ignore this.
+  base: '/grid-calculator-v-1.1.1/',
   plugins: [jsxInJsPlugin, react()],
   resolve: {
     alias: {
