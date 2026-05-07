@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import styled, { ThemeProvider, keyframes } from 'styled-components';
-import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine, RiBarChartLine } from 'react-icons/ri';
+import { RiSunLine, RiMoonLine, RiLineChartLine, RiExchangeDollarLine, RiTableLine, RiUploadLine, RiDownloadLine, RiFilePdfLine, RiFileExcel2Line, RiFileCopyLine, RiInfinityLine, RiTimeLine, RiTentFill, RiCrosshair2Fill, RiMoneyDollarBoxFill, RiAlignTop, RiCloseLine, RiBarChartLine, RiSettingsLine } from 'react-icons/ri';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx-js-style';
@@ -128,6 +128,20 @@ const calculateValue = (totalHours, config = DEFAULT_CONFIG) => {
   return Number(totalAmount.toFixed(2));
 };
 
+// New helper: applies first-hour overrides (0.1–0.9 only) then optional cents ending (except on overridden first-hour cells)
+const getEffectivePrice = (totalHours, config, customCents, firstHourOverrides) => {
+  const h = totalHours.toFixed(1);
+  // First-hour override takes precedence and is NOT affected by cents
+  if (firstHourOverrides && firstHourOverrides[h] != null && totalHours >= 0.1 && totalHours <= 0.9) {
+    return firstHourOverrides[h];
+  }
+  const raw = calculateValue(totalHours, config);
+  if (!customCents) return raw;
+  // Cents override: just replace the cents part (keep floor dollars) — skip headers/1st row handled at call site
+  const dollars = Math.floor(raw);
+  return Number((dollars + parseInt(customCents, 10) / 100).toFixed(2));
+};
+
 const buildFilename = (store, ext) => {
   const safeStore = (store || '').trim().replace(/\s+/g, '_');
   const date = new Date().toISOString().slice(0, 10);
@@ -148,6 +162,16 @@ const readStateFromURL = () => {
   const capType = CAP_TYPE_VALUES.includes(get('cap')) ? get('cap') : DEFAULT_CONFIG.capType;
   const view = VIEW_MODES.includes(get('view')) ? get('view') : 'grid';
   const theme = get('theme') === 'dark' || get('theme') === 'light' ? get('theme') : null;
+  const cents = get('cents');
+  const fhParam = get('fh');
+  const firstHourOverrides = {};
+  if (fhParam) {
+    const vals = fhParam.split(',');
+    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].forEach((h, i) => {
+      const v = vals[i];
+      if (v && v !== 'null' && !isNaN(parseFloat(v))) firstHourOverrides[h.toFixed(1)] = parseFloat(v);
+    });
+  }
   return {
     storeName: get('name') || '',
     config: {
@@ -161,11 +185,13 @@ const readStateFromURL = () => {
       inputHours: get('hours') ?? DEFAULT_CONFIG.inputHours
     },
     viewMode: view,
-    theme
+    theme,
+    customCents: cents && /^\d{2}$/.test(cents) ? cents : null,
+    firstHourOverrides
   };
 };
 
-const writeStateToURL = ({ storeName, config, viewMode, theme }) => {
+const writeStateToURL = ({ storeName, config, viewMode, theme, customCents, firstHourOverrides }) => {
   const params = new URLSearchParams();
   if (storeName) params.set('name', storeName);
   if (config.baseRate !== DEFAULT_CONFIG.baseRate) params.set('base', config.baseRate);
@@ -184,6 +210,13 @@ const writeStateToURL = ({ storeName, config, viewMode, theme }) => {
   if (config.inputHours) params.set('hours', config.inputHours);
   if (viewMode !== 'grid') params.set('view', viewMode);
   if (theme) params.set('theme', theme);
+  if (customCents) params.set('cents', customCents);
+  if (firstHourOverrides && Object.keys(firstHourOverrides).length > 0) {
+    const fhStr = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+      .map(h => firstHourOverrides[h.toFixed(1)] ?? 'null')
+      .join(',');
+    params.set('fh', fhStr);
+  }
   const qs = params.toString();
   const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
   window.history.replaceState(null, '', url);
@@ -924,8 +957,16 @@ function GridCalculator({ syncUrl = true }) {
   const [showCopyToast, setShowCopyToast] = useState(false);
   const [copyToastMessage, setCopyToastMessage] = useState('Copied!');
   const [importModalState, setImportModalState] = useState({ open: false, pending: null, error: null, dragActive: false });
+  const [customCents, setCustomCents] = useState(initialState.customCents || null);
+  const [firstHourOverrides, setFirstHourOverrides] = useState(initialState.firstHourOverrides || {});
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [centsModalOpen, setCentsModalOpen] = useState(false);
+  const [firstHourModalOpen, setFirstHourModalOpen] = useState(false);
+  const [tempCents, setTempCents] = useState('');
+  const [tempFirstHour, setTempFirstHour] = useState({}); // temp edits for modal
   const dropdownRef = useRef(null);
   const fileInputRef = useRef(null);
+  const settingsRef = useRef(null);
 
   const hourRates = useMemo(() => Array.from({ length: 21 }, (_, i) => i), []);
   const increments = useMemo(() => Array.from({ length: 10 }, (_, i) => i * 0.1), []);
@@ -933,15 +974,18 @@ function GridCalculator({ syncUrl = true }) {
   useEffect(() => {
     if (!syncUrl) return;
     const timer = setTimeout(() => {
-      writeStateToURL({ storeName, config, viewMode, theme: initialState.theme ? theme : null });
+      writeStateToURL({ storeName, config, viewMode, theme: initialState.theme ? theme : null, customCents, firstHourOverrides });
     }, 150);
     return () => clearTimeout(timer);
-  }, [syncUrl, storeName, config, viewMode, theme, initialState.theme]);
+  }, [syncUrl, storeName, config, viewMode, theme, initialState.theme, customCents, firstHourOverrides]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowExportMenu(false);
+      }
+      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+        setShowSettingsMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -958,7 +1002,7 @@ function GridCalculator({ syncUrl = true }) {
 
   const buildGridRows = () => hourRates.map((hourRate) => [
     hourRate.toFixed(1),
-    ...increments.map((inc) => calculateValue(hourRate + inc, config).toFixed(2))
+    ...increments.map((inc) => getEffectivePrice(hourRate + inc, config, customCents, firstHourOverrides).toFixed(2))
   ]);
 
   const handleExportPDF = () => {
@@ -1123,6 +1167,64 @@ function GridCalculator({ syncUrl = true }) {
     setImportModalState({ open: false, pending: null, error: null, dragActive: false });
   };
 
+  // New settings modals
+  const openCentsModal = () => {
+    setTempCents(customCents || '');
+    setCentsModalOpen(true);
+  };
+  const closeCentsModal = () => {
+    setCentsModalOpen(false);
+    setTempCents('');
+  };
+  const applyCents = () => {
+    const val = tempCents.trim();
+    if (val === '' || (parseInt(val, 10) >= 0 && parseInt(val, 10) <= 99)) {
+      setCustomCents(val === '' ? null : val.padStart(2, '0'));
+      closeCentsModal();
+      triggerToast(val === '' ? 'Cents reset to auto' : `Cents set to .${val.padStart(2, '0')}`);
+    } else {
+      triggerToast('Please enter 00-99');
+    }
+  };
+  const resetCents = () => {
+    setCustomCents(null);
+    setTempCents('');
+    closeCentsModal();
+    triggerToast('Cents reset to auto');
+  };
+
+  const openFirstHourModal = () => {
+    // Initialize temp with current overrides or empty
+    const init = {};
+    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].forEach(h => {
+      const key = h.toFixed(1);
+      init[key] = firstHourOverrides[key] ?? null;
+    });
+    setTempFirstHour(init);
+    setFirstHourModalOpen(true);
+  };
+  const closeFirstHourModal = () => {
+    setFirstHourModalOpen(false);
+    setTempFirstHour({});
+  };
+  const applyFirstHour = () => {
+    const cleaned = {};
+    Object.entries(tempFirstHour).forEach(([k, v]) => {
+      if (v != null && !isNaN(parseFloat(v)) && parseFloat(v) >= 0) {
+        cleaned[k] = parseFloat(v);
+      }
+    });
+    setFirstHourOverrides(cleaned);
+    closeFirstHourModal();
+    triggerToast('First hour overrides applied');
+  };
+  const resetFirstHour = () => {
+    setFirstHourOverrides({});
+    setTempFirstHour({});
+    closeFirstHourModal();
+    triggerToast('First hour resets to auto');
+  };
+
   const processImportFile = async (file) => {
     if (!file) return;
     if (!/\.xlsx$/i.test(file.name)) {
@@ -1177,18 +1279,18 @@ function GridCalculator({ syncUrl = true }) {
       increments.forEach((inc) => {
         const totalHours = hourRate + inc;
         if (totalHours >= 0) {
-          const totalAmount = calculateValue(totalHours, config);
+          const totalAmount = getEffectivePrice(totalHours, config, customCents, firstHourOverrides);
           const elr = totalHours > 0 ? parseFloat((totalAmount / totalHours).toFixed(2)) : 0;
           data.push({ hours: totalHours, elr, totalAmount });
         }
       });
     });
     return data.sort((a, b) => a.hours - b.hours);
-  }, [config, hourRates, increments]);
+  }, [config, hourRates, increments, customCents, firstHourOverrides]);
 
   const handleMouseEnter = (e, hourRate, inc) => {
     const totalHours = hourRate + inc;
-    const totalAmount = calculateValue(totalHours, config);
+    const totalAmount = getEffectivePrice(totalHours, config, customCents, firstHourOverrides);
     const elr = totalHours > 0 ? (totalAmount / totalHours).toFixed(2) : 'N/A';
     const rect = e.target.getBoundingClientRect();
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -1206,7 +1308,7 @@ function GridCalculator({ syncUrl = true }) {
   const numInputHours = Number(config.inputHours || '');
   let totalAmount = 0;
   if (!isNaN(numInputHours) && numInputHours >= 0) {
-    totalAmount = calculateValue(numInputHours, config);
+    totalAmount = getEffectivePrice(numInputHours, config, customCents, firstHourOverrides);
   }
 
   const copyToClipboard = (text) => {
@@ -1282,6 +1384,20 @@ function GridCalculator({ syncUrl = true }) {
             <IconButton onClick={toggleTheme}>
               {theme === 'light' ? <RiSunLine size={24} /> : <RiMoonLine size={24} />}
             </IconButton>
+            {/* Settings / Gear dropdown - rightmost */}
+            <ExportDropdown ref={settingsRef}>
+              <IconButton onClick={() => setShowSettingsMenu(!showSettingsMenu)} title="Settings">
+                <RiSettingsLine size={24} />
+              </IconButton>
+              <ExportMenu $show={showSettingsMenu}>
+                <ExportOption onClick={() => { setShowSettingsMenu(false); /* open cents modal */ openCentsModal(); }} title="Modify cents ending">
+                  Modify cents ending
+                </ExportOption>
+                <ExportOption onClick={() => { setShowSettingsMenu(false); /* open first hour modal */ openFirstHourModal(); }} title="Modify first hour">
+                  Modify first hour
+                </ExportOption>
+              </ExportMenu>
+            </ExportDropdown>
           </ButtonGroup>
         </Header>
         <Card>
@@ -1499,7 +1615,7 @@ function GridCalculator({ syncUrl = true }) {
             <CalculatorContainer>
               {config.inputHours && !isNaN(numInputHours) && numInputHours >= 0 && (
                 <ResultContainer>
-                  <ResultText>Total Amount: ${totalAmount.toFixed(2)}</ResultText>
+                  <ResultText>Total Amount: $${totalAmount.toFixed(2)}</ResultText>
                   <CopyButton onClick={handleCopyTotalAmount} title="Copy Total Amount">
                     <RiFileCopyLine />
                   </CopyButton>
@@ -1573,7 +1689,7 @@ function GridCalculator({ syncUrl = true }) {
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <DropZoneText>Drag &amp; drop a Labor Rate Matrix .xlsx here</DropZoneText>
+                    <DropZoneText>Drag & drop a Labor Rate Matrix .xlsx here</DropZoneText>
                     <DropZoneSubtext>or click to choose a file</DropZoneSubtext>
                   </DropZone>
                   <HiddenFileInput
@@ -1591,6 +1707,100 @@ function GridCalculator({ syncUrl = true }) {
         <Tooltip $show={tooltip.show} $x={tooltip.x} $y={tooltip.y}>
           {tooltip.content}
         </Tooltip>
+
+        {/* Cents Ending Modal */}
+        {centsModalOpen && (
+          <ModalOverlay onClick={closeCentsModal}>
+            <Modal onClick={(e) => e.stopPropagation()}>
+              <ModalHeader>
+                <ModalTitle>Modify Cents Ending</ModalTitle>
+                <ModalCloseButton onClick={closeCentsModal} aria-label="Close">
+                  <RiCloseLine size={22} />
+                </ModalCloseButton>
+              </ModalHeader>
+              <ModalMessage>
+                Force every calculated price (grid, chart, calculator) to end with these cents.<br />
+                Example: 123.456 → 123.88
+              </ModalMessage>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
+                <Label style={{ minWidth: '80px' }}>Cents (00-99)</Label>
+                <Input
+                  type="number"
+                  value={tempCents}
+                  onChange={(e) => setTempCents(e.target.value)}
+                  placeholder="88"
+                  min="0"
+                  max="99"
+                  style={{ width: '120px', textAlign: 'center' }}
+                />
+              </div>
+              <ModalActions>
+                <ModalButton onClick={resetCents}>Reset to Auto</ModalButton>
+                <ModalButton $primary onClick={applyCents}>Apply</ModalButton>
+              </ModalActions>
+            </Modal>
+          </ModalOverlay>
+        )}
+
+        {/* First Hour Override Modal — mirrors first row of grid (0.1–0.9 editable) */}
+        {firstHourModalOpen && (
+          <ModalOverlay onClick={closeFirstHourModal}>
+            <Modal onClick={(e) => e.stopPropagation()} style={{ maxWidth: '720px' }}>
+              <ModalHeader>
+                <ModalTitle>Modify First Hour (0.1–0.9)</ModalTitle>
+                <ModalCloseButton onClick={closeFirstHourModal} aria-label="Close">
+                  <RiCloseLine size={22} />
+                </ModalCloseButton>
+              </ModalHeader>
+              <ModalMessage>
+                Enter custom total prices for the first hour increments. These override the normal calculation and are <strong>not</strong> affected by cents ending.
+              </ModalMessage>
+
+              <div style={{ overflowX: 'auto', margin: '12px 0' }}>
+                <Table style={{ minWidth: '680px' }}>
+                  <thead>
+                    <tr>
+                      <Th style={{ width: '70px' }}>0.0</Th>
+                      {[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9].map(h => (
+                        <Th key={h} style={{ width: '65px' }}>{h.toFixed(1)}</Th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <Td $isFirstColumn style={{ fontWeight: 700, background: '#f0f4f8' }}>
+                        {getEffectivePrice(0.0, config, null, {}).toFixed(2)}
+                      </Td>
+                      {[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9].map(h => {
+                        const key = h.toFixed(1);
+                        const currentAuto = calculateValue(h, config).toFixed(2);
+                        return (
+                          <Td key={key} style={{ padding: '6px 4px' }}>
+                            <input
+                              type="number"
+                              value={tempFirstHour[key] ?? ''}
+                              placeholder={currentAuto}
+                              onChange={(e) => setTempFirstHour(prev => ({ ...prev, [key]: e.target.value === '' ? null : parseFloat(e.target.value) }))}
+                              style={{ width: '100%', padding: '6px 8px', fontSize: '13px', textAlign: 'right', border: '1px solid #d1d9e0', borderRadius: '6px' }}
+                              step="0.01"
+                              min="0"
+                            />
+                          </Td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </Table>
+              </div>
+
+              <ModalActions>
+                <ModalButton onClick={resetFirstHour}>Reset All to Auto</ModalButton>
+                <ModalButton $primary onClick={applyFirstHour}>Apply Overrides</ModalButton>
+              </ModalActions>
+            </Modal>
+          </ModalOverlay>
+        )}
+
         <VersionLabel>v{version}</VersionLabel>
         <CopyToast $show={showCopyToast}>{copyToastMessage}</CopyToast>
       </AppContainer>
