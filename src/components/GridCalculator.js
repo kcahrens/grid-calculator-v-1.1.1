@@ -33,7 +33,33 @@ const DEFAULT_CONFIG = {
   maxELR: '200'
 };
 
-const buildParameterRows = (config, storeName) => {
+const FIRST_HOUR_SLOTS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+
+const serializeFirstHourOverrides = (firstHourOverrides) => {
+  if (!firstHourOverrides || Object.keys(firstHourOverrides).length === 0) return '';
+  return FIRST_HOUR_SLOTS
+    .map((h) => firstHourOverrides[h.toFixed(1)] ?? 'null')
+    .join(',');
+};
+
+const parseFirstHourOverrides = (raw) => {
+  const firstHourOverrides = {};
+  if (raw === undefined || raw === null || raw === '') return firstHourOverrides;
+  const vals = String(raw).split(',');
+  FIRST_HOUR_SLOTS.forEach((h, i) => {
+    const v = vals[i];
+    if (v && v !== 'null' && !isNaN(parseFloat(v))) firstHourOverrides[h.toFixed(1)] = parseFloat(v);
+  });
+  return firstHourOverrides;
+};
+
+const parseCustomCents = (raw) => {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const cents = String(raw).trim();
+  return /^\d{2}$/.test(cents) ? cents : null;
+};
+
+const buildParameterRows = (config, storeName, { customCents, firstHourOverrides } = {}) => {
   const rows = [
     ['Exported', new Date().toLocaleString()],
     ['Store Name', storeName || ''],
@@ -47,6 +73,9 @@ const buildParameterRows = (config, storeName) => {
     if (config.capType === 'elr') rows.push(['Max ELR', config.maxELR]);
   }
   if (config.mode === 'proportional') rows.push(['End Hours', config.q]);
+  if (customCents) rows.push(['Cents Ending', customCents]);
+  const fhStr = serializeFirstHourOverrides(firstHourOverrides);
+  if (fhStr) rows.push(['First Row Overrides', fhStr]);
   return rows;
 };
 
@@ -164,14 +193,7 @@ const readStateFromURL = () => {
   const theme = get('theme') === 'dark' || get('theme') === 'light' ? get('theme') : null;
   const cents = get('cents');
   const fhParam = get('fh');
-  const firstHourOverrides = {};
-  if (fhParam) {
-    const vals = fhParam.split(',');
-    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].forEach((h, i) => {
-      const v = vals[i];
-      if (v && v !== 'null' && !isNaN(parseFloat(v))) firstHourOverrides[h.toFixed(1)] = parseFloat(v);
-    });
-  }
+  const firstHourOverrides = parseFirstHourOverrides(fhParam);
   return {
     storeName: get('name') || '',
     config: {
@@ -186,7 +208,7 @@ const readStateFromURL = () => {
     },
     viewMode: view,
     theme,
-    customCents: cents && /^\d{2}$/.test(cents) ? cents : null,
+    customCents: parseCustomCents(cents),
     firstHourOverrides
   };
 };
@@ -229,10 +251,93 @@ const CAP_LABEL_TO_VALUE = Object.fromEntries(
   Object.entries(CAP_TYPE_LABELS).map(([k, v]) => [v, k])
 );
 
-const parseImportedWorkbook = (wb) => {
-  const sheet = wb.Sheets['Parameters'];
-  if (!sheet) throw new Error("This isn't a Labor Rate Matrix export.");
+const PRICE_EPS = 0.005;
+
+const parseGridCells = (sheet) => {
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  const headerIdx = rows.findIndex(
+    (row) => Array.isArray(row) && String(row[0]).trim() === 'Labor Time'
+  );
+  if (headerIdx < 0) throw new Error('Grid sheet is missing a Labor Time header row.');
+  const header = rows[headerIdx];
+  const increments = header.slice(1).map((v) => Number(v));
+  if (!increments.length || increments.some((v) => isNaN(v))) {
+    throw new Error('Grid sheet has an invalid header row.');
+  }
+
+  const cells = [];
+  for (let r = headerIdx + 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!Array.isArray(row) || row[0] == null || row[0] === '') continue;
+    const hourRate = Number(row[0]);
+    if (isNaN(hourRate)) continue;
+    increments.forEach((inc, i) => {
+      const val = row[i + 1];
+      if (val == null || val === '') return;
+      const num = Number(val);
+      if (isNaN(num)) return;
+      cells.push({ totalHours: hourRate + inc, value: num });
+    });
+  }
+  return cells;
+};
+
+const inferCustomCentsFromGrid = (gridCells, config) => {
+  const votes = new Map();
+  gridCells.forEach(({ totalHours, value }) => {
+    const raw = calculateValue(totalHours, config);
+    if (Math.abs(value - raw) < PRICE_EPS) return;
+    const dollars = Math.floor(raw);
+    if (Math.floor(value + PRICE_EPS) !== dollars) return;
+    const cents = Math.round((value - Math.floor(value)) * 100);
+    if (cents < 0 || cents > 99) return;
+    const withCents = Number((dollars + cents / 100).toFixed(2));
+    if (Math.abs(value - withCents) >= PRICE_EPS) return;
+    const key = String(cents).padStart(2, '0');
+    votes.set(key, (votes.get(key) || 0) + 1);
+  });
+
+  if (!votes.size) return null;
+  let best = null;
+  let bestCount = 0;
+  votes.forEach((count, cents) => {
+    if (count > bestCount) {
+      best = cents;
+      bestCount = count;
+    }
+  });
+  return best;
+};
+
+const inferFirstHourOverridesFromGrid = (gridCells, config, customCents) => {
+  const firstHourOverrides = {};
+  gridCells.forEach(({ totalHours, value }) => {
+    if (totalHours < 0.1 || totalHours > 0.9) return;
+    const raw = calculateValue(totalHours, config);
+    let expected = raw;
+    if (customCents) {
+      expected = Number((Math.floor(raw) + parseInt(customCents, 10) / 100).toFixed(2));
+    }
+    if (Math.abs(value - expected) >= PRICE_EPS) {
+      firstHourOverrides[totalHours.toFixed(1)] = Number(Number(value).toFixed(2));
+    }
+  });
+  return firstHourOverrides;
+};
+
+const inferOverridesFromGrid = (sheet, config) => {
+  const gridCells = parseGridCells(sheet);
+  const customCents = inferCustomCentsFromGrid(gridCells, config);
+  const firstHourOverrides = inferFirstHourOverridesFromGrid(gridCells, config, customCents);
+  return { customCents, firstHourOverrides };
+};
+
+const parseImportedWorkbook = (wb) => {
+  const paramSheet = wb.Sheets['Parameters'];
+  const gridSheet = wb.Sheets['Grid'];
+  if (!paramSheet || !gridSheet) throw new Error("This isn't a Labor Rate Matrix export.");
+
+  const rows = XLSX.utils.sheet_to_json(paramSheet, { header: 1 });
   const map = {};
   rows.forEach((row) => {
     if (Array.isArray(row) && row.length >= 2 && row[0]) {
@@ -245,18 +350,23 @@ const parseImportedWorkbook = (wb) => {
   const capLabel = map['Cap Type'];
   const capType = capLabel ? (CAP_LABEL_TO_VALUE[capLabel] || DEFAULT_CONFIG.capType) : DEFAULT_CONFIG.capType;
   const asString = (v, fallback) => (v === undefined || v === null || v === '' ? fallback : String(v));
+  const config = {
+    baseRate: asString(map['Base Rate'], DEFAULT_CONFIG.baseRate),
+    multiplier: asString(map['Increase / Hr (%)'], DEFAULT_CONFIG.multiplier),
+    mode,
+    capType,
+    peakHours: asString(map['Peak Hours'], DEFAULT_CONFIG.peakHours),
+    maxELR: asString(map['Max ELR'], DEFAULT_CONFIG.maxELR),
+    q: asString(map['End Hours'], DEFAULT_CONFIG.q),
+    inputHours: ''
+  };
+  const { customCents, firstHourOverrides } = inferOverridesFromGrid(gridSheet, config);
+
   return {
     storeName: asString(map['Store Name'], ''),
-    config: {
-      baseRate: asString(map['Base Rate'], DEFAULT_CONFIG.baseRate),
-      multiplier: asString(map['Increase / Hr (%)'], DEFAULT_CONFIG.multiplier),
-      mode,
-      capType,
-      peakHours: asString(map['Peak Hours'], DEFAULT_CONFIG.peakHours),
-      maxELR: asString(map['Max ELR'], DEFAULT_CONFIG.maxELR),
-      q: asString(map['End Hours'], DEFAULT_CONFIG.q),
-      inputHours: ''
-    }
+    config,
+    customCents,
+    firstHourOverrides
   };
 };
 
@@ -1193,7 +1303,7 @@ function GridCalculator({ syncUrl = true }) {
       columnStyles
     });
 
-    const paramLine = buildParameterRows(config, storeName)
+    const paramLine = buildParameterRows(config, storeName, { customCents, firstHourOverrides })
       .filter(([k, v]) => !(k === 'Store Name' && !v))
       .map(([k, v]) => `${k}: ${v}`)
       .join('   |   ');
@@ -1276,7 +1386,7 @@ function GridCalculator({ syncUrl = true }) {
     }
 
     // Parameters sheet
-    const paramRows = buildParameterRows(config, storeName);
+    const paramRows = buildParameterRows(config, storeName, { customCents, firstHourOverrides });
     const paramAoa = [[titleText], ['Parameter', 'Value'], ...paramRows];
     const paramSheet = XLSX.utils.aoa_to_sheet(paramAoa);
     paramSheet['!cols'] = [{ wch: 22 }, { wch: 28 }];
@@ -1402,6 +1512,8 @@ function GridCalculator({ syncUrl = true }) {
     if (!pending) return;
     setStoreName(pending.storeName);
     setConfig(pending.config);
+    setCustomCents(pending.customCents ?? null);
+    setFirstHourOverrides(pending.firstHourOverrides ?? {});
     closeImportModal();
     triggerToast('Imported!');
   };
