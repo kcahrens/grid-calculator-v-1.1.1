@@ -370,6 +370,40 @@ const parseImportedWorkbook = (wb) => {
   };
 };
 
+const buildImportToastMessage = ({ storeName, config, customCents, firstHourOverrides }) => {
+  const lines = [`Imported ${storeName || '(no store name)'}`];
+
+  const details = [
+    `Rate $${config.baseRate}`,
+    `+${config.multiplier}/hr`,
+    MODE_LABELS[config.mode] || config.mode
+  ];
+  if (config.mode !== 'infinity') {
+    details.push(CAP_TYPE_LABELS[config.capType] || config.capType);
+    if (config.capType === 'hours') details.push(`${config.peakHours}h peak`);
+    if (config.capType === 'elr') details.push(`max ELR $${config.maxELR}`);
+  }
+  if (config.mode === 'proportional') details.push(`end ${config.q}h`);
+  lines.push(details.join(' · '));
+
+  lines.push(
+    customCents
+      ? `Cents override: Yes · .${customCents}`
+      : 'Cents override: No'
+  );
+
+  const overrides = FIRST_HOUR_SLOTS
+    .filter((h) => firstHourOverrides?.[h.toFixed(1)] != null)
+    .map((h) => `${h.toFixed(1)}h → $${firstHourOverrides[h.toFixed(1)].toFixed(2)}`);
+  lines.push(
+    overrides.length
+      ? `First hour override: Yes · ${overrides.join(', ')}`
+      : 'First hour override: No'
+  );
+
+  return lines.join('\n');
+};
+
 // Themes
 const lightTheme = {
   background: '#f5f7fa',
@@ -1049,10 +1083,14 @@ const CopyToast = styled.div`
   transform: translateX(-50%);
   background-color: ${({ theme }) => theme.accent};
   color: #fff;
-  padding: 10px 20px;
-  border-radius: 20px;
-  font-size: 14px;
+  padding: ${({ $multiline }) => ($multiline ? '14px 22px' : '10px 20px')};
+  border-radius: ${({ $multiline }) => ($multiline ? '12px' : '20px')};
+  font-size: ${({ $multiline }) => ($multiline ? '13px' : '14px')};
   font-weight: 600;
+  line-height: 1.5;
+  white-space: ${({ $multiline }) => ($multiline ? 'pre-line' : 'nowrap')};
+  text-align: ${({ $multiline }) => ($multiline ? 'left' : 'center')};
+  max-width: ${({ $multiline }) => ($multiline ? 'min(92vw, 420px)' : 'none')};
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 2000;
   opacity: ${({ $show }) => ($show ? 1 : 0)};
@@ -1181,6 +1219,8 @@ function GridCalculator({ syncUrl = true }) {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showCopyToast, setShowCopyToast] = useState(false);
   const [copyToastMessage, setCopyToastMessage] = useState('Copied!');
+  const [copyToastMultiline, setCopyToastMultiline] = useState(false);
+  const toastTimeoutRef = useRef(null);
   const [importModalState, setImportModalState] = useState({ open: false, pending: null, error: null, dragActive: false });
   const [customCents, setCustomCents] = useState(initialState.customCents || null);
   const [firstHourOverrides, setFirstHourOverrides] = useState(initialState.firstHourOverrides || {});
@@ -1197,6 +1237,10 @@ function GridCalculator({ syncUrl = true }) {
 
   const hourRates = useMemo(() => Array.from({ length: 21 }, (_, i) => i), []);
   const increments = useMemo(() => Array.from({ length: 10 }, (_, i) => i * 0.1), []);
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+  }, []);
 
   useEffect(() => {
     if (!syncUrl) return;
@@ -1515,7 +1559,7 @@ function GridCalculator({ syncUrl = true }) {
     setCustomCents(pending.customCents ?? null);
     setFirstHourOverrides(pending.firstHourOverrides ?? {});
     closeImportModal();
-    triggerToast('Imported!');
+    triggerToast(buildImportToastMessage(pending), 6000, true);
   };
 
   const handleFileInputChange = (e) => {
@@ -1584,10 +1628,15 @@ function GridCalculator({ syncUrl = true }) {
       .catch(() => triggerToast('Failed to copy'));
   };
 
-  const triggerToast = (message = 'Copied!') => {
+  const triggerToast = (message = 'Copied!', duration = 1500, multiline = false) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setCopyToastMessage(message);
+    setCopyToastMultiline(multiline);
     setShowCopyToast(true);
-    setTimeout(() => setShowCopyToast(false), 1500);
+    toastTimeoutRef.current = setTimeout(() => {
+      setShowCopyToast(false);
+      setCopyToastMultiline(false);
+    }, duration);
   };
 
   const handleCopyTotalAmount = () => {
@@ -2065,7 +2114,7 @@ function GridCalculator({ syncUrl = true }) {
         )}
 
         <VersionLabel>v{version}</VersionLabel>
-        <CopyToast $show={showCopyToast}>{copyToastMessage}</CopyToast>
+        <CopyToast $show={showCopyToast} $multiline={copyToastMultiline}>{copyToastMessage}</CopyToast>
       </AppContainer>
     </ThemeProvider>
   );
